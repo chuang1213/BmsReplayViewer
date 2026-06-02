@@ -29,6 +29,9 @@ private:
     bool          show_export_dialog_ = false;
     GLFWwindow*   window_             = nullptr;
 
+    std::string   bms_sha256_;
+    std::string   bms_md5_;
+
     struct RecentList {
         std::vector<std::string> charts;
         std::vector<std::string> replays;

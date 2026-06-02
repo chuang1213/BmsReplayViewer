@@ -3,6 +3,8 @@
 #include "replay/lr2rep_parser.h"
 #include "app/panels/welcome_panel.h"
 #include "app/panels/about_panel.h"
+#include "picosha2.h"
+#include "md5.h"
 #include "json.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -92,6 +94,18 @@ void Application::load_chart_file(const std::string& path) {
     std::printf("[Application] loaded chart: %s (%zu notes, %zu measures)\n",
                 path.c_str(), timeline_.notes.size(), timeline_.measures.size());
     reload_chart_view();
+
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (f) {
+        size_t sz = static_cast<size_t>(f.tellg());
+        f.seekg(0, std::ios::beg);
+        std::vector<uint8_t> buf(sz);
+        f.read(reinterpret_cast<char*>(buf.data()), sz);
+        bms_sha256_ = picosha2::hash256_hex_string(buf);
+        bms_md5_ = md5::hash_hex_string(buf);
+        std::printf("[Application] chart SHA256: %s\n", bms_sha256_.c_str());
+        std::printf("[Application] chart MD5:    %s\n", bms_md5_.c_str());
+    }
 }
 
 void Application::load_replay_file(const std::string& path) {
@@ -100,8 +114,9 @@ void Application::load_replay_file(const std::string& path) {
         return;
     }
     auto dot = path.rfind('.');
+    std::string ext;
     if (dot != std::string::npos) {
-        std::string ext = path.substr(dot);
+        ext = path.substr(dot);
         for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (ext == ".lr2rep") {
             Lr2RepParser lr2;
@@ -119,6 +134,22 @@ void Application::load_replay_file(const std::string& path) {
     std::printf("[Application] loaded replay: %s (%zu hits)\n",
                 path.c_str(), replay_data_.hits.size());
     reload_chart_view();
+
+    if (chart_view_.hash_verify_enabled && !bms_sha256_.empty()) {
+        std::filesystem::path rp(path);
+        std::string stem = rp.stem().string();
+        bool ok = false;
+        if (ext == ".lr2rep")
+            ok = stem.find(bms_md5_) != std::string::npos;
+        else
+            ok = stem.find(bms_sha256_) != std::string::npos;
+        chart_view_.hash_verify_status = ok ? "OK" : "MISMATCH";
+        std::printf("[Application] hash verify: %s (%s)\n",
+                    chart_view_.hash_verify_status.c_str(),
+                    ok ? "matched" : "not found in filename");
+    } else {
+        chart_view_.hash_verify_status.clear();
+    }
 }
 
 void Application::reload_chart_view() {
@@ -227,9 +258,7 @@ void Application::on_drop(GLFWwindow* window, int count, const char** paths) {
     for (auto& r : replays) app->load_replay_file(r);
 }
 void Application::render_analyzer_tab() {
-    if (chart_loaded_) {
-        chart_view_.render_analyzer();
-    } else {
+    if (!chart_loaded_) {
         ImGui::SetCursorPosY(ImGui::GetContentRegionAvail().y * 0.4f);
         ImGui::TextDisabled("No chart loaded.");
         ImGui::Spacing();
@@ -242,7 +271,17 @@ void Application::render_analyzer_tab() {
             std::string p = open_file_dialog(replay_filter, "Open Replay File");
             if (!p.empty()) { if (chart_loaded_) load_replay_file(p); }
         }
+        return;
     }
+
+    float avail = ImGui::GetContentRegionAvail().x;
+    ImGui::BeginChild("##ChartPanel", ImVec2(avail * 0.58f, 0), true);
+    chart_view_.render_analyzer();
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##ControlsPanel", ImVec2(0, 0), true);
+    chart_view_.render_controls_child();
+    ImGui::EndChild();
 }
 
 void Application::render_tab_bar() {
@@ -400,9 +439,6 @@ int Application::run() {
 
         render_menu_bar();
         render_tab_bar();
-
-        if (active_tab_ == 1 && chart_loaded_)
-            chart_view_.render_controls_window();
 
         if (show_export_dialog_) {
             ImGui::SetNextWindowSize(ImVec2(360, 320), ImGuiCond_FirstUseEver);

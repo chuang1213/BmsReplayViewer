@@ -403,6 +403,7 @@ void ChartView::render_controls_inline() {
     ImGui::Checkbox("Show Releases", &show_releases_);
 
     ImGui::SeparatorText("Appearance");
+    ImGui::SliderFloat("Note Speed", &note_speed_, 0.5f, 2.0f, "%.2fx");
     ImGui::SliderFloat("Note Thickness", &note_thickness_, 1.0f, 20.0f, "%.0f");
     ImGui::SliderInt("Scroll Distance", &scroll_distance_, 480, 7680);
     ImGui::Checkbox("Auto Follow Playback", &auto_follow_playback_);
@@ -435,21 +436,7 @@ void ChartView::render_controls_inline() {
                     s.mean_offset, s.stddev_offset);
     }
 
-#ifdef BMV_DEBUG
-    if (timeline_) {
-        int r = timeline_->rank;
-        if (r < 0) r = 0; if (r > 3) r = 3;
-        auto rank = static_cast<JudgeRank>(r);
-        const auto& w = JudgeProfile::get_window(judge_engine_.system(), rank);
-        ImGui::SeparatorText("Judge Config [DEBUG]");
-        ImGui::Text("System: %s", judge_engine_.system() == JudgeSystem::LR2 ? "LR2" : "beatoraja");
-        ImGui::Text("Rank:   %s (%d)", JudgeProfile::rank_string(rank), r);
-        ImGui::Text("PG: %d ms  GR: %d ms  GD: %d ms", w.pg, w.gr, w.gd);
-        ImGui::Text("BD: %d ms  POOR: %d ms", w.bd, w.poor);
-    }
-#endif
-
-    if (replay_) {
+    if (timeline_ && replay_ && !replay_->hits.empty()) {
         ImGui::SeparatorText("Replay");
         const char* fmt_str = (replay_->format == ReplayFormat::LR2REP) ? "LR2REP" : "BRD";
         ImGui::Text("Format: %s", fmt_str);
@@ -478,21 +465,46 @@ void ChartView::render_controls_inline() {
                     timeline_->notes.size(),
                     replay_ ? replay_->hits.size() : 0);
     }
+
+    ImGui::SeparatorText("Developer");
+    ImGui::Checkbox("Show Developer Options", &show_dev_options);
+    if (show_dev_options) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f),
+                           "WARNING: These options are for advanced users only.");
+
+        ImGui::Checkbox("##HashVerify", &hash_verify_enabled);
+        ImGui::SameLine();
+        ImGui::Text("Hash Verification");
+        if (!hash_verify_status.empty()) {
+            bool ok = hash_verify_status == "OK";
+            ImGui::TextColored(ok ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f)
+                                  : ImVec4(1.0f, 0.3f, 0.2f, 1.0f),
+                               "  %s", hash_verify_status.c_str());
+        }
+
+        ImGui::Checkbox("Show Debug Overlay", &show_debug_overlay);
+
+        if (timeline_) {
+            int r = timeline_->rank;
+            if (r < 0) r = 0; if (r > 3) r = 3;
+            auto rank = static_cast<JudgeRank>(r);
+            const auto& w = JudgeProfile::get_window(judge_engine_.system(), rank);
+            ImGui::SeparatorText("Judge Config");
+            ImGui::Text("System: %s", judge_engine_.system() == JudgeSystem::LR2 ? "LR2" : "beatoraja");
+            ImGui::Text("Rank:   %s (%d)", JudgeProfile::rank_string(rank), r);
+            ImGui::Text("PG: %d ms  GR: %d ms  GD: %d ms", w.pg, w.gr, w.gd);
+            ImGui::Text("BD: %d ms  POOR: %d ms", w.pg > w.bd ? w.bd : 0, w.poor);
+        }
+    }
 }
 
-void ChartView::render_controls_window() {
-    ImGui::SetNextWindowSize(ImVec2(280, 380), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Controls")) {
-        ImGui::End();
-        return;
-    }
+void ChartView::render_controls_child() {
     render_controls_inline();
-    ImGui::End();
 }
 
 void ChartView::render_analyzer() {
     if (is_playing_ && timeline_) {
-        current_time_sec_ += ImGui::GetIO().DeltaTime;
+        current_time_sec_ += ImGui::GetIO().DeltaTime * static_cast<double>(note_speed_);
         double new_tick = timeline_->time_map.second_to_tick(current_time_sec_);
         if (new_tick >= timeline_->tick_end()) {
             new_tick = static_cast<double>(timeline_->tick_end());
@@ -525,9 +537,7 @@ void ChartView::render_analyzer() {
 
         dl->PopClipRect();
 
-#ifdef BMV_DEBUG
-        // Debug overlay: replay mapping state
-        {
+        if (show_debug_overlay && replay_) {
             auto mode_name = [](LR2RandomMode m) -> const char* {
                 if (m == LR2RandomMode::Mirror)  return "MIRROR";
                 if (m == LR2RandomMode::Random)  return "RANDOM";
@@ -565,7 +575,6 @@ void ChartView::render_analyzer() {
             }
             ImGui::End();
         }
-#endif
 
         ImGui::Separator();
         if (timeline_) {

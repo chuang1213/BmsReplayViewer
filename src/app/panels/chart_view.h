@@ -26,7 +26,7 @@ public:
     void set_data(const Timeline* timeline, const ReplayData* replay);
 
     void render_analyzer();
-    void render_controls_window();
+    void render_controls_child();
 
     static int lane_to_column(int render_lane, bool is_2p);
 
@@ -45,7 +45,14 @@ public:
     void   set_note_thickness(float v)       { note_thickness_ = v; }
     void   set_scroll_distance(int v)        { scroll_distance_ = v; }
     void   set_replay_display_mode(int v)    { replay_display_mode_ = static_cast<ReplayDisplayMode>(v); }
-    void   set_auto_follow_playback(bool v)  { auto_follow_playback_ = v; }
+    void    set_auto_follow_playback(bool v)  { auto_follow_playback_ = v; }
+    float   note_speed()             const { return note_speed_; }
+    void    set_note_speed(float v)        { note_speed_ = v; }
+
+    bool    show_dev_options    = false;
+    bool    show_debug_overlay  = false;
+    bool    hash_verify_enabled = true;
+    std::string hash_verify_status;
 
 private:
     const Timeline* timeline_ = nullptr;
@@ -61,6 +68,7 @@ private:
 
     int    player_idx_                = 0;   // 0=P1, 1=P2
 
+    float  note_speed_              = 1.0f;
     float  note_thickness_           = 6.0f;
     int    scroll_distance_          = 7680;
     bool   auto_follow_playback_     = true;

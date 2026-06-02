@@ -63,6 +63,8 @@ target_include_directories(bmv PRIVATE
     libs/stb
     libs/miniz
     libs/nlohmann
+    libs/picosha2
+    libs/md5
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
