@@ -15,15 +15,20 @@ static const JudgeWindow kLr2Windows[4] = {
     { 21,  60, 120, 200, 1000, 200, 200 },  // EASY
 };
 
-// beatoraja 7KEY windows (ms) — verified against JudgeProperty.java:32
-//   Base (judgerank=HARD@100%): PG=±20  GR=±60  GD=±150  BD_fast=280  BD_slow=220  POOR=500
-//   Rank multipliers from JudgeWindowRule.NORMAL: {25,50,75,100,125} for {V_EASY,EASY,NORMAL,HARD,V_HARD}
-//   BMS #RANK 0=V_HARD→125%, 1=HARD→100%, 2=NORMAL→75%, 3=EASY→50%
+// beatoraja 7K SEVENKEYS windows (ms) — vanilla beatoraja, from
+//   beatoraja-src play/JudgeProperty.java (SEVENKEYS):
+//     base (µs): PG ±20  GR ±60  GD ±150  BD [late 280 / early 220]  MS [late 150 / early 500]
+//   Per-#RANK scaling = JudgeWindowRule.NORMAL.judgerank {25,50,75,100,125}% for
+//   #RANK {0=VERYHARD, 1=HARD, 2=NORMAL, 3=EASY, 4=VERYEASY}; MS (poor) is NOT scaled.
+//   NOTE: beatoraja judges on dmtime∈[lo,hi] with ASYMMETRIC BD/MS. Here PG/GR/GD are
+//   symmetric (exact); bd_fast/bd_slow hold the early/late BAD bounds, bd = late bound.
+//   ⚠ The previous table had the rank scaling INVERTED (VERYHARD must be tightest, not widest).
+//                                pg  gr   gd   bd  poor  bd_fast(early) bd_slow(late)
 static const JudgeWindow kBeatorajaWindows[4] = {
-    { 25,  75, 188, 275, 500, 263, 275 },  // VERY_HARD (125%)
-    { 20,  60, 150, 220, 500, 210, 220 },  // HARD (100%)
-    { 15,  45, 113, 165, 500, 158, 165 },  // NORMAL (75%)
-    { 10,  30,  75, 110, 500, 105, 110 },  // EASY (50%)
+    {  5,  15,  37,  70, 500,  55,  70 },  // VERY_HARD  #RANK 0  (25%)
+    { 10,  30,  75, 140, 500, 110, 140 },  // HARD       #RANK 1  (50%)
+    { 15,  45, 112, 210, 500, 165, 210 },  // NORMAL     #RANK 2  (75%)
+    { 20,  60, 150, 280, 500, 220, 280 },  // EASY       #RANK 3  (100%)
 };
 
 const JudgeWindow& JudgeProfile::get_window(JudgeSystem sys, JudgeRank rank) {

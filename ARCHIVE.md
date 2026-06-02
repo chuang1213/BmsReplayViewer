@@ -9,6 +9,8 @@
 ## 0. 待办
 1.hash校验不完整
 2.旧版本的brd格式没兼容（testfile里还没放）
+3.回放解析解耦重构（方案见 ADR-22）
+4.中文路径会炸（UTF-8）：Windows 下 std::ifstream 窄字符路径按 ANSI 解释，中文路径打不开 → 文件打开统一走 std::filesystem::u8path、PNG 输出加 STBIW_WINDOWS_UTF8、CLI argv 转 UTF-8
 ## 1. 项目定位
 
 BMV 是一个 **BMS 谱面分析工具**（非游戏本体、非编辑器）。
@@ -921,6 +923,26 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 - 现代 `std::mt19937` 使用 2002 版 `init_genrand`（乘数 1812433253），与 LR2 的 1998 版（乘数 69069）完全不同
 - LR2 取界用 `(uint64_t(r) * n) >> 32`（64 位乘取高 32 位），非 `r % n`
 - LR2 存储逆置换（inverse permutation）而非洗牌后的数组
+
+### ADR-22: 回放解析分层重构（计划，工厂1/工厂2 + 统一 ReplayData）
+**背景**: 当前 `src/replay/` 把“文件 → 事件”揉在各 parser 里——两 parser 事件模型不一致、`brd_parser` 一个函数干 6 层、lane 映射散落、`ReplayData` 混多格式；brd 下个版本还要兼容旧版回放（§0 待办 2）。
+
+**决策（目标分层）**:
+```
+File → 工厂1(格式分派) ┬─→ LR2 parser ───────────────┐
+                       └─→ 工厂2(brd 版本分派) ┬ 新 ┤─→ 统一 ReplayData → 消费
+                                               └ 旧 ┘
+```
+- **工厂1（文件格式分派）**: 按扩展名/magic 判 `.lr2rep` / `.brd` 选 parser，取代散在 `main` 的 if-else；`IReplayParser` 要么落地成它返回的多态、要么删。
+- **工厂2（brd 版本分派）**: brd 兼容旧版回放，新旧流程有重合 → 版本判断 + 公共子流程抽进 brd 工厂，按版本分支。
+- **统一内部格式**: 两 parser 的唯一职责 = 转成统一内部 `ReplayData`（统一事件 `{time, lane, down}`）；格式专属元数据（seed/mode/shuffle/op210）分开装。
+- **事件模型统一**: brd 现把按下+抬起配对成一个 hit（`is_press` 恒 true）、lr2 是分开的事件 → 统一，下游（LN 收尾等）不再分叉。
+- **lane 在各 parser 内归一**: 物理 lane 0–7 对 beatoraja 是 `1234567s`、对 lr2 是 `s1234567`（scratch 位置不同）→ 各 parser 内归一到统一内部约定（如 scratch=0、键=1–7）。
+- **拆 brd_parser 巨函数**: 6 层（读/解压/JSON/base64/再解压/帧解码/配对）拆成可单测的小步。
+- **按谱面 hash 匹配回放**: 回放与谱面强绑定，用谱面 hash 筛选/匹配对应回放。
+
+**保留**: base64 / gzip / MT19937（lr2_random）等底层解码器正确，不动。
+**注意**: brd 无 op210 那样的逐音符真值，重构后无法像 LR2 那样自检；改 brd 事件模型前先固定几条回放的 hit 数/分布做快照兜底。
 - 任一环节用错 → Random 映射全部错位 → op210 对拍必然失败
 
 ### ADR-22: display_to_bms 由 JudgementEngine 统一管理 (Phase 2.5.1)
