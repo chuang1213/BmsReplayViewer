@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/imgui-populate"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/ffa428f49877d61060a680bac84529f3/imgui-populate.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/2580d4ca1c5b83627f42f9a68e784382/imgui-populate-complete.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-build.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-configure.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-download.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-install.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-mkdir.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-patch.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-test.rule"
+		},
+		{
+			"file" : "D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"imgui-populate"
+		],
+		"name" : "imgui-populate"
+	}
+}

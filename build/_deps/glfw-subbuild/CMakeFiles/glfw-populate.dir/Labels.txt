@@ -1,0 +1,14 @@
+# Target labels
+ glfw-populate
+# Source files and their labels
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/glfw-populate
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/bac4c3a14420aba51b7350d532e9c020/glfw-populate.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/394fa5e6b884e7ad4592c706e5cb73a8/glfw-populate-complete.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-build.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-configure.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-download.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-install.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-mkdir.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-patch.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-test.rule
+D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/21c77185b28b9d1ccb35002ceef1d46f/glfw-populate-update.rule

@@ -1,0 +1,14 @@
+# Target labels
+ imgui-populate
+# Source files and their labels
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/imgui-populate
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/ffa428f49877d61060a680bac84529f3/imgui-populate.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/2580d4ca1c5b83627f42f9a68e784382/imgui-populate-complete.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-build.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-configure.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-download.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-install.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-mkdir.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-patch.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-test.rule
+D:/BMV/BMV/build/_deps/imgui-subbuild/CMakeFiles/7434861b629417eed9607a92b780cb44/imgui-populate-update.rule

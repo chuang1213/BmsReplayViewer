@@ -1,0 +1,10 @@
+^D:\BMV\BMV\BUILD\_DEPS\GLFW-SUBBUILD\CMAKEFILES\BAC4C3A14420ABA51B7350D532E9C020\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/BMV/BMV/build/_deps/glfw-subbuild -BD:/BMV/BMV/build/_deps/glfw-subbuild --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/BMV/BMV/build/_deps/glfw-subbuild/glfw-populate.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

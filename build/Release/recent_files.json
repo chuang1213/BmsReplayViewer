@@ -1,0 +1,25 @@
+{
+  "charts": [
+    "D:\\BMV\\BMV\\air7god.bme",
+    "D:\\BMV\\BMV\\testfiles\\anata_g24.bme",
+    "D:\\BMV\\BMV\\build\\Release\\air7god.bme"
+  ],
+  "config": {
+    "auto_follow_playback": true,
+    "note_thickness": 10.0,
+    "replay_display_mode": 0,
+    "scroll_distance": 480
+  },
+  "replays": [
+    "D:\\BMV\\BMV\\air7god.bme_Random.brd",
+    "D:\\BMV\\BMV\\testfiles\\random1.lr2rep",
+    "D:\\BMV\\BMV\\testfiles\\normal.lr2rep",
+    "D:\\BMV\\BMV\\testfiles\\random2.lr2rep",
+    "D:\\BMV\\BMV\\air7god.bme_Normal.brd",
+    "D:\\BMV\\BMV\\testfiles\\random.lr2rep",
+    "D:\\Projects\\bms\\brv\\old_py\\Old\\BRV\\BRV0.1.0\\air_replay\\liaoxingyao\\lxy.lr2rep",
+    "D:\\BMV\\BMV\\build\\Release\\air7god.bme_Normal.brd",
+    "",
+    ""
+  ]
+}

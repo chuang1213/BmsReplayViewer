@@ -1,0 +1,10 @@
+D:/BMV/BMV/build/CMakeFiles/bmv.dir
+D:/BMV/BMV/build/CMakeFiles/INSTALL.dir
+D:/BMV/BMV/build/CMakeFiles/ALL_BUILD.dir
+D:/BMV/BMV/build/CMakeFiles/ZERO_CHECK.dir
+D:/BMV/BMV/build/_deps/glfw-build/CMakeFiles/uninstall.dir
+D:/BMV/BMV/build/_deps/glfw-build/CMakeFiles/INSTALL.dir
+D:/BMV/BMV/build/_deps/glfw-build/CMakeFiles/ALL_BUILD.dir
+D:/BMV/BMV/build/_deps/glfw-build/src/CMakeFiles/glfw.dir
+D:/BMV/BMV/build/_deps/glfw-build/src/CMakeFiles/update_mappings.dir
+D:/BMV/BMV/build/_deps/glfw-build/src/CMakeFiles/INSTALL.dir
