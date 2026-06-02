@@ -2,8 +2,8 @@
 
 > 最后更新: 2026-06-02
 > 语言: C++17 | 构建: CMake 3.20+ | 平台: Windows (MSVC) / Linux (GCC/Clang)
-> 总代码量: ~4,000 行 (src) | 版本: 2.0.3 | 模块: core, format, render, replay, judge, analysis, app
-> 当前阶段: Phase 2.5.1
+> 总代码量: ~4,200 行 (src) | 版本: 3.0.1 | 模块: core, format, render, replay, judge, analysis, app
+> 当前阶段: Phase 3.0.1
 
 ---
 
@@ -31,7 +31,7 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
                                   ↑                ↑
          BRD / .lr2rep → Parser → ReplayData ──→ JudgementEngine → Overlay
          GLFW Window ← ImGui ← TabBar (Welcome | Analyzer | About)
-                             ← Controls (floating)
+                             ← Analyzer: [Chart (58%) | Controls (42%)]
                              ← Video Export (FFmpeg pipe)
 ```
 
@@ -79,24 +79,26 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
   │  • 静态 PNG 谱面渲染               │
   │  • 共享 CoreRenderer 绘制原语       │
   └─────────────────────────────────────┘
-  ┌─────────────────────────────────────┐
-  │       ChartView (GUI)               │
-  │  • ImDrawList GPU 直刷              │
-  │  • 滚动 (Wheel) + 缩放 (Ctrl+Wheel) │
-  │  • 可见性裁剪 (Culling)             │
-  │  • Random 乱序 Note 自动重排        │
-  │  • Replay 叠加 (Line/Box/Marker)    │
-  │  • 1P/2P 布局实时切换              │
-  │  • Replay 显示开关                  │
-  │  • 共享 CoreRenderer 绘制原语       │
-  └─────────────────────────────────────┘
-  ┌─────────────────────────────────────┐
-  │       Controls Panel                │
-  │  • Show Replay checkbox             │
-  │  • 1P / 2P layout radio             │
-  │  • Status readout                   │
-  │  • Replay Info (Format / Mode / Seed)│
-  └─────────────────────────────────────┘
+   ┌─────────────────────────────────────┐
+   │       ChartView (GUI)               │
+   │  • ImDrawList GPU 直刷              │
+   │  • 滚动 (Wheel) + 缩放 (Ctrl+Wheel) │
+   │  • 可见性裁剪 (Culling)             │
+   │  • Random 乱序 Note 自动重排        │
+   │  • Replay 叠加 (Line/Box/Marker)    │
+   │  • 1P/2P 布局实时切换              │
+   │  • Note Speed 变速滑条              │
+   │  • 播放控制 (Play/Pause)            │
+   └─────────────────────────────────────┘
+   ┌─────────────────────────────────────┐
+   │       Controls Panel (内嵌右侧)      │
+   │  • View: Show Replay, 1P/2P layout  │
+   │  • Replay Display: Line/Box/Marker  │
+   │  • Appearance: Note Speed, Thickness│
+   │  • Judge System, Accuracy Stats     │
+   │  • Replay Info (Format/Mode/Seed)   │
+   │  • Developer: Hash Verify, Debug    │
+   └─────────────────────────────────────┘
 ```
 
 ### 设计原则
@@ -108,12 +110,14 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
 5. **BPM source 可追溯** — 每个 BpmEvent 标注来源（HEADER/Ch03/Ch08）
 6. **Replay 不扭曲** — 回放数据保持物理轨道位置，谱面 Note 按 shuffle 重排
 7. **布局纯渲染层** — 1P/2P 切换仅在 lane→column 映射层处理，解析层无感知
-8. **双模式共存** — 无参启动 → GUI（TabBar + 浮动 Controls），带参启动 → CLI
-9. **配置持久化** — 所有 UI 设置（Note 粗细、滚动距离、回放模式、自动跟随）自动保存/恢复
+8. **双模式共存** — 无参启动 → GUI（TabBar + 固定 Controls 面板），带参启动 → CLI
+9. **配置持久化** — 所有 UI 设置（Note 粗细、滚动距离、Note Speed、回放模式、自动跟随）自动保存/恢复
 10. **判定引擎** — LR2 和 beatoraja 双系统判定，支持 Easy/Normal/Hard/VeryHard 四档
 11. **LR2 协议兼容** — 魔改 MT19937 (1998版) RNG + Fisher-Yates + inverse permutation 复刻 LR2Random
 12. **映射一致性** — display_to_bms 和 bms_to_display_ 由 JudgementEngine 统一管理，ChartView 通过 getter 同步，避免 Note 渲染与 Hit 判定出现 lane 偏差
 13. **共享渲染核心** — PngRenderer + ChartView + VideoExporter 共用 CoreRenderer 绘制原语（draw_background / draw_notes / draw_replay_hits），避免代码重复
+14. **面板解耦** — Welcome / About 面板独立文件，纯 ImGui 渲染无业务依赖
+15. **Hash 校验** — BMS 文件拖入时计算 SHA256 + MD5，回放文件通过文件名包含匹配校验正确性
 
 ---
 
@@ -148,10 +152,12 @@ src/
 ├── analysis/
 │   └── judgement_engine.h/cpp (580行) 回放判定分析 (游标匹配 + display_to_bms 暴露)
 ├── app/
-│   ├── application.h/cpp    (501行)  GLFW 窗口 + ImGui TabBar + 主循环 + Config 持久化
+│   ├── application.h/cpp    (514行)  GLFW 窗口 + ImGui TabBar + 主循环 + Hash 校验
 │   └── panels/
-│       ├── chart_view.h/cpp (569行)  GPU 谱面视窗 + 交互控件 + 判定叠加
-│       └── video_export.h/cpp (291行)  FFmpeg Pipe 视频导出
+│       ├── chart_view.h/cpp (589行)  GPU 谱面视窗 + 交互控件 + 判定叠加 + Developer
+│       ├── video_export.h/cpp (291行)  FFmpeg Pipe 视频导出
+│       ├── welcome_panel.h/cpp ( 62行)  Welcome 页签渲染 (独立解耦)
+│       └── about_panel.h/cpp  ( 46行)  About 页签渲染 (独立解耦)
 └── main.cpp                 (125行)  双模式入口: GUI (无参) / CLI (带参)
 ```
 
@@ -164,6 +170,12 @@ src/
 > **Phase 2.5.1 新增**:
 > - `src/judge/judge_profile.h/cpp` — 判定窗口独立模块，从 judgement_engine 中抽取
 > - `src/render/core_renderer.h` (180行) — 共享渲染核心，被 PngRenderer / ChartView / VideoExporter 复用
+>
+> **Phase 3.0.1 新增**:
+> - `src/app/panels/welcome_panel.h/cpp` — Welcome 页签从 application.cpp 解耦为独立面板
+> - `src/app/panels/about_panel.h/cpp` — About 页签从 application.cpp 解耦为独立面板
+> - `libs/picosha2/picosha2.h` — 自实现 SHA256 header-only 库
+> - `libs/md5/md5.h` — 自实现 MD5 header-only 库
 
 第三方库 (vendored / FetchContent):
 
@@ -171,6 +183,8 @@ src/
 libs/
 ├── stb/stb_image_write.h         PNG 编码 (header-only)
 ├── nlohmann/json.hpp             JSON 解析 (BRD)
+├── picosha2/picosha2.h           SHA256 哈希 (自实现, header-only)
+├── md5/md5.h                     MD5 哈希 (自实现, header-only)
 ├── miniz/
 │   ├── miniz.h / miniz.c          miniz 入口 (v3.1.0 master, header + zlib wrapper)
 │   ├── miniz_export.h             MINIZ_EXPORT 宏定义 (自建)
@@ -282,6 +296,13 @@ struct Config {
     bool show_replay  = true;   // replay overlay toggle
     bool is_2p_layout = false;  // 1P (SC left) / 2P (SC right)
 };
+
+// 公开可写成员 (Developer 选项)
+bool    show_dev_options    = false;   // 开发者选项展开/折叠
+bool    show_debug_overlay  = false;   // 调试叠加层显示
+bool    hash_verify_enabled = true;    // BMS↔Replay 文件名 hash 校验
+std::string hash_verify_status;        // 校验结果文字 ("OK" / "MISMATCH")
+float   note_speed_ = 1.0f;            // Note Speed 变速 (0.5x ~ 2.0x)
 ```
 
 ### 共享渲染接口 (Phase 2.5.1 新增)
@@ -538,12 +559,17 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | Show Releases 开关 (蓝灰色菱形的 LR2 Release 标记) | ✓ |
 | 1P/2P 布局实时切换 | ✓ |
 | 浮动控制面板 (Controls Window) | ✓ |
+| Controls 固定内嵌 Analyzer 右侧 | ✓ Phase 3.0.1 |
+| Note Speed 变速滑条 (0.5x ~ 2.0x) | ✓ Phase 3.0.1 |
 | Note Thickness 统一调节 (1-20px) | ✓ |
 | Auto Follow Playback 开关 | ✓ |
 | Config 持久化 (recent_files.json) | ✓ |
 | 双模式启动 (GUI / CLI) | ✓ |
 | 拖拽加载谱面 + 回放文件 | ✓ |
 | File 菜单 + 最近文件列表 | ✓ |
+| Hash 校验 (SHA256/MD5 文件名匹配) | ✓ Phase 3.0.1 |
+| Developer 设置区域 (Hash Verify, Debug Overlay, Judge Config) | ✓ Phase 3.0.1 |
+| Welcome/About 面板独立解耦 | ✓ Phase 3.0.1 |
 | 共享 CoreRenderer 绘制原语 | ✓ Phase 2.5.1 |
 | 音频播放 | ✗ |
 | 播放头 Seek / 拖拽 | ✗ |
@@ -693,6 +719,7 @@ STOP: 5 events, all 0.125 beats
 | `bc1462814a...brd` | — | — | — | ✓ 额外 BRD 测试文件 |
 | `bc1462814a..._1.brd` | — | — | — | ✓ 额外 BRD 测试文件 |
 | `bc1462814a..._2.brd` | — | — | — | ✓ 额外 BRD 测试文件 |
+| `eeff3a9a...lr2rep` | — | — | — | ✓ LR2REP MD5 文件名匹配测试 |
 
 ### LR2 Replay 验证
 
@@ -719,10 +746,12 @@ testfiles/
 ├── air7god.bme_Normal.brd         # Normal BRD 回放
 ├── air7god.bme_Random.brd         # Random BRD 回放
 ├── anata_g24.bme                  # 附加测试谱面
-├── bc1462814a...brd               # BRD 测试 (×3 变体)
-├── bc1462814a..._1.brd
-├── bc1462814a..._2.brd
+├── bc1462814a...brd               # BRD 测试 (SHA256 文件名匹配)
+├── bc1462814a..._1.brd            # 变体: 前缀标记
+├── bc1462814a..._2.brd            # 变体: 后缀标记
 ├── bc1462814a..._2/               # 关联数据目录
+├── eeff3a9a...lr2rep              # LR2REP 测试 (MD5 文件名匹配)
+├── eeff3a9a...png                 # 预期渲染输出
 ├── eeff3a9a...txt                 # 未知文本
 ├── L'ouvreur(SPpp).bml            # 复杂谱面 (BPM/STOP/LNOBJ/Ch02)
 ├── normal.lr2rep                  # LR2 OFF 模式回放
@@ -759,8 +788,9 @@ cmake --build build --config Debug
 # ── GUI 模式 ──
 # 无参启动
 .\build\Release\bmv.exe
-# 拖拽 .bms/.brd/.lr2rep 到窗口
+# 拖拽 .bms/.brd/.lr2rep 到窗口 (自动计算 hash + 校验文件名)
 # File → Open Replay... 支持 .brd 和 .lr2rep
+# 验证: 拖入 [sha256].brd 或 [md5].lr2rep 文件名即自动校验
 ```
 
 ### 镜像加速
@@ -922,6 +952,28 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 - 独立模块可在不依赖 JudgementEngine 的情况下被引用
 - JudgementEngine 从 439 行膨胀中回收至更合理的 580 行
 
+### ADR-27: Controls 面板从浮动改为固定内嵌 (Phase 3.0.1)
+**决策**: 删除 `render_controls_window()` 浮动窗口，在 `render_analyzer_tab()` 中用 `BeginChild` 将 Analyzer 拆分为左右两栏（ChartPanel 58% / ControlsPanel 42%），通过新增 `render_controls_child()` 公开方法内嵌渲染。
+**理由**:
+- 浮动窗口在 Docking 模式下会被吸入或随意拖动，用户容易丢失 Controls
+- 固定布局更符合音游谱面分析器 "Chart + Controls" 的经典双栏范式
+- 消除 `Application::run()` 中的条件渲染调用，简化主循环
+
+### ADR-28: Hash 校验采用文件名包含匹配 (Phase 3.0.1)
+**决策**: BMS 文件加载时计算原始字节的 SHA256 + MD5；回放文件加载时提取文件名 stem，BRD 检查包含 SHA256（64 位 hex 串）、LR2REP 检查包含 MD5（32 位 hex 串）。使用自实现 header-only 哈希库（picosha2/md5），不引入外部加密依赖。
+**理由**:
+- 文件名匹配比嵌入式 metadata 提取更简单灵活，支持前后缀标记（如 `1_[sha256].brd`）
+- 不需要修改 BRD/LR2REP Parser，零侵入现有解析管线
+- 自实现哈希库避免 OpenSSL / Crypto++ 等重量级依赖，保持轻量单文件构建
+- 验证确保用户拖入的正确回放文件（避免谱面/回放不匹配的调试误区）
+
+### ADR-29: Welcome/About 面板独立解耦 + Developer 选项集中管理 (Phase 3.0.1)
+**决策**: Welcome 和 About 渲染从 `application.cpp` 抽取为独立 `welcome_panel.h/cpp` 和 `about_panel.h/cpp`；原 `#ifdef BMV_DEBUG` 条件编译改为 Developer 区域开关控制。
+**理由**:
+- 面板独立：修改文案无需触碰 Application 类，关注点分离
+- Welcome 按钮通过 `WelcomeAction` 枚举返回值解耦，面板不依赖 Application 内部方法
+- Developer 开关替代条件编译：所有调试功能无需重新编译即可切换，对开发者更友好
+
 ---
 
 ## 12. 第三方依赖
@@ -930,6 +982,8 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 |----|------|------|------|
 | stb_image_write.h | PNG 编码 | header-only, vendored | — |
 | nlohmann/json.hpp | JSON 解析 (BRD) | single header, vendored | — |
+| picosha2 (自实现) | SHA256 哈希 | header-only, vendored | — |
+| md5 (自实现) | MD5 哈希 | header-only, vendored | — |
 | miniz (tinfl) | GZIP/raw DEFLATE 解压 | source compiled | v3.1.0 master |
 | GLFW | 窗口 + OpenGL 上下文 | FetchContent ZIP | 3.4 |
 | Dear ImGui | GUI 框架 + 交互 | FetchContent ZIP | docking branch |
@@ -979,6 +1033,31 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
   - `random1_3456712.png` / `random2_5732146.png` 预期输出对照
   - 新增 testfiles: `anata_g24.bme`, `bc1462814a...brd` 系列, `normal.png` 预期输出
 
+### Phase 3.0.1: GUI 重构 + Note Speed + Hash 校验 + Developer 面板
+- __GUI 布局重构__:
+  - Controls 从浮动窗口改为固定内嵌 Analyzer 右侧 (58% Chart / 42% Controls)
+  - `render_controls_inline()` 通过新增 `render_controls_child()` public 方法暴露
+  - 删除 `render_controls_window()` 及主循环调用
+- __Note Speed 变速__:
+  - 新增 `note_speed_` 滑条 (0.5x ~ 2.0x, 默认 1.0x)，影响播放时 tick 推进速率
+- __Hash 校验系统__:
+  - 新增 `libs/picosha2/picosha2.h` 和 `libs/md5/md5.h` 自实现 header-only 哈希库
+  - BMS 文件加载时计算 SHA256 + MD5 (原文节字节)
+  - 回放文件加载时提取文件名 stem，BRD 校验包含 SHA256，LR2REP 校验包含 MD5
+  - 校验默认开启，支持关闭，结果在 Developer 区域显示 ("OK" / "MISMATCH")
+- __面板解耦__:
+  - `render_welcome_tab()` → `src/app/panels/welcome_panel.h/cpp`
+  - `render_about_tab()` → `src/app/panels/about_panel.h/cpp`
+  - Welcome 按钮通过 `WelcomeAction` 枚举返回值与 Application 解耦
+- __Developer 设置区域__:
+  - Controls 底部新增可折叠 Developer 区域，含警告文字
+  - 移出所有 `#ifdef BMV_DEBUG` 条件编译，改为 Developer 开关控制
+  - Hash Verification 开关 + 状态显示
+  - Show Debug Overlay 开关 (原 `#ifdef BMV_DEBUG`)
+  - Judge Config 信息 (原 `#ifdef BMV_DEBUG`)
+- __测试增强__:
+  - 验证 SHA256 和 MD5 实现与 `certutil` 交叉确认一致
+
 ---
 
 ## 14. 未来阶段
@@ -1025,4 +1104,4 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 
 ---
 
-*项目状态: Phase 2.5.1 完成 (模块化重构 + LR2 Lane 映射 + P1/P2 双玩家 + CoreRenderer 共享 + Marker/Release UI + 映射一致性修复)*
+*项目状态: Phase 3.0.1 完成 (GUI 布局重构 + Note Speed 变速 + Hash 校验 + Welcome/About 解耦 + Developer 面板)*
