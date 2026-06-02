@@ -136,7 +136,14 @@ void JudgementEngine::analyze(const Timeline& timeline,
     int unmatched_hits = 0;
     int missed_notes_count = 0;
 
-    // → Process each BMS lane independently (hit-driven with note cursor auto-advance)
+    // → Process each BMS lane independently — faithful port of LR2 ProcSinglenote
+    //   (OpenLR2 LR2/Scene04_Play.cpp). Per lane a note cursor advances; each key
+    //   press judges AT MOST one note. LR2 rules reproduced:
+    //     • press − note > BD            → that note MISSED   (op210 value 1)
+    //     • |press − note| ≤ BD          → PG/GR/GD/BD cascade, note consumed
+    //     • note ahead, BD < ahead <POOR → empty POOR         (op210 value 0), note kept
+    //     • note ahead ≥ POOR (1000 ms)  → press ignored, nothing recorded
+    //   (BAD→next-note carry at Scene04_Play.cpp:852 omitted for now — rare.)
     for (auto& kv : lane_notes) {
         int bms_lane = kv.first;
         const auto& notes = kv.second;  // sorted by tick
@@ -144,115 +151,106 @@ void JudgementEngine::analyze(const Timeline& timeline,
                                                         : std::vector<size_t>{};
         size_t si = 0;  // note cursor index within this lane's notes
 
+        const int    bd       = std::max(win.bd_fast, win.bd_slow); // BAD window (ms)
+        const double bd_sec   = static_cast<double>(bd) / 1000.0;
+        const double poor_sec = static_cast<double>(win.poor) / 1000.0;
+
+        // LR2 judges against INTEGER-millisecond note times (note.realTiming is whole
+        // ms); we otherwise keep sub-ms precision, which flips ~15 boundary notes
+        // (e.g. our 21.68 ms → PG, but LR2's truncated 22 ms → GR). Truncate note time
+        // to int ms for LR2 to match exactly. Beatoraja keeps full (µs) precision.
+        const bool lr2_int_ms = (replay.format == ReplayFormat::LR2REP);
+        auto note_ms = [&](const NoteEvent& n) -> double {
+            double ms = timeline.time_map.tick_to_second(n.tick) * 1000.0;
+            // +1e-6 guards against a whole-ms note time computed as N-epsilon by
+            // float error (which would truncate to N-1 and flip a boundary note).
+            return lr2_int_ms ? std::trunc(ms + 1e-6) : ms;
+        };
+
         for (size_t hi = 0; hi < hits.size(); ++hi) {
-            size_t hit_idx = hits[hi];
-            const auto& hit = replay.hits[hit_idx];
+            const auto& hit = replay.hits[hits[hi]];
             if (!hit.is_press) continue;  // releases handled in LN tail pass
 
-            double sec_hit;
-            if (replay.format == ReplayFormat::LR2REP)
-                sec_hit = hit.time_sec;
-            else
-                sec_hit = timeline.time_map.tick_to_second(hit.tick_start);
+            double sec_hit = (replay.format == ReplayFormat::LR2REP)
+                           ? hit.time_sec
+                           : timeline.time_map.tick_to_second(hit.tick_start);
+            // LR2 replay timestamps are whole ms; recover the exact integer (sec_hit =
+            // time_ms/1000, and *1000 alone leaves float roundtrip error that can flip a
+            // boundary note, e.g. -22 ms showing as -21.9996 → truncates to 21 → PGREAT).
+            double press_ms = lr2_int_ms ? std::round(sec_hit * 1000.0) : sec_hit * 1000.0;
 
-            // 1. Auto-advance: mark way-past notes as POOR
+            // 1. Miss every note this press is already more than BD past (POOR, value 1).
             while (si < notes.size()) {
-                size_t note_idx = notes[si];
-                const auto& note = timeline.notes[note_idx];
-                // Note's effective end: use end_tick for LN, tick for normal
-                double sec_note_end = timeline.time_map.tick_to_second(
-                    note.end_tick > note.tick ? note.end_tick : note.tick);
-                // Note still within POOR reach: stop advancing
-                if (sec_hit <= sec_note_end + static_cast<double>(win.poor) / 1000.0) break;
-
-                // Note is way past → mark as missed (POOR)
+                const auto& note = timeline.notes[notes[si]];
+                double sec_note = timeline.time_map.tick_to_second(note.tick);
+                if (sec_hit - sec_note <= bd_sec) break;   // current note still reachable / ahead
                 missed_notes_.push_back(&note);
                 missed_notes_count++;
                 si++;
             }
 
-            // No more notes on this lane: remaining hits are orphan POOR
-            if (si >= notes.size()) {
-                HitResult hr;
-                hr.hit = &hit;
-                hr.judge = Judge::POOR;
-                results_.push_back(hr);
-                unmatched_hits++;
-                continue;
-            }
+            // No note remains on this lane → LR2 records nothing for this press.
+            if (si >= notes.size()) continue;
 
-            // 2. Current note
-            size_t note_idx = notes[si];
+            size_t note_idx  = notes[si];
             const auto& note = timeline.notes[note_idx];
-            double sec_note = timeline.time_map.tick_to_second(note.tick);
-            double offset_ms = (sec_hit - sec_note) * 1000.0;
+            double sec_note  = timeline.time_map.tick_to_second(note.tick);
+            double offset_ms = press_ms - note_ms(note);
+            int    abs_ms    = static_cast<int>(std::fabs(offset_ms)); // LR2 truncates the gap: abs(ftol)
 
-            // 2. LR2 recursive judgment
-            int abs_ms = static_cast<int>(std::fabs(offset_ms));
-            int max_bd = std::max(win.bd_fast, win.bd_slow);
+            // 2. Within BAD window → judge this note (ascending cascade) and consume it.
+            //    LR2 (Scene04_Play.cpp:852): after a BAD, the SAME press also judges the
+            //    next note if it too is within BD — chaining through consecutive BADs.
+            if (abs_ms <= bd) {
+                bool carry = true;
+                while (carry && si < notes.size()) {
+                    size_t ni       = notes[si];
+                    const auto& n   = timeline.notes[ni];
+                    double off      = press_ms - note_ms(n);
+                    int    a        = static_cast<int>(std::fabs(off)); // LR2 truncates the gap: abs(ftol)
+                    if (a > bd) break;   // this note not within the BAD window of the press
 
-            // Hit too early for this note → orphan POOR
-            if (offset_ms < -max_bd) {
-                HitResult hr;
-                hr.hit = &hit;
-                hr.judge = Judge::POOR;
-                hr.offset_ms = offset_ms;
-                hr.fast = true;
-                results_.push_back(hr);
-                unmatched_hits++;
+                    HitResult hr;
+                    hr.hit       = &hit;
+                    hr.note      = &n;
+                    hr.offset_ms = off;
+                    if (off < 0) hr.fast = true; else if (off > 0) hr.slow = true;
+
+                    if      (a <= win.pg) hr.judge = Judge::PGREAT;
+                    else if (a <= win.gr) hr.judge = Judge::GREAT;
+                    else if (a <= win.gd) hr.judge = Judge::GOOD;
+                    else                  hr.judge = Judge::BAD;
+
+                    results_.push_back(hr);
+                    offsets_for_stats.push_back(off);
+                    note_matched[ni] = true;
+                    matched_hits++;
+                    si++;
+                    carry = (hr.judge == Judge::BAD);   // only a BAD carries to the next note
+                }
                 continue;
             }
 
-            // Try to judge current note
-            bool note_judged = false;
-            if (abs_ms <= max_bd) {
+            // 3. gap > BD. Step 1 already missed any note the press is past, so the
+            //    current note is AHEAD. Empty POOR (value 0) only if it is within the
+            //    POOR window ahead; if further than POOR (1000 ms), LR2 ignores the
+            //    press entirely. Either way the note is NOT consumed.
+            double note_ahead_sec = sec_note - sec_hit;
+            if (note_ahead_sec < poor_sec) {
                 HitResult hr;
-                hr.hit  = &hit;
-                hr.note = &note;
+                hr.hit       = &hit;
+                hr.judge     = Judge::POOR;   // empty POOR — maps to op210 value 0
                 hr.offset_ms = offset_ms;
-
-                if (offset_ms < 0) { hr.fast = true; }
-                else if (offset_ms > 0) { hr.slow = true; }
-
-                if (abs_ms <= win.pg)            hr.judge = Judge::PGREAT;
-                else if (abs_ms <= win.gr)       hr.judge = Judge::GREAT;
-                else if (abs_ms <= win.gd)       hr.judge = Judge::GOOD;
-                else if (offset_ms < 0 && abs_ms <= win.bd_fast) hr.judge = Judge::BAD;
-                else if (offset_ms >= 0 && abs_ms <= win.bd_slow) hr.judge = Judge::BAD;
-                else                             hr.judge = Judge::POOR;
-
+                hr.fast      = true;
                 results_.push_back(hr);
-                offsets_for_stats.push_back(offset_ms);
-                note_matched[note_idx] = true;
-                matched_hits++;
-                note_judged = true;
+                unmatched_hits++;
             }
-
-            // Recursive: if next note also within BAD window, retry same hit
-            if (si + 1 < notes.size()) {
-                size_t next_note_idx = notes[si + 1];
-                const auto& next_note = timeline.notes[next_note_idx];
-                double sec_next = timeline.time_map.tick_to_second(next_note.tick);
-                int next_offset = static_cast<int>((sec_hit - sec_next) * 1000.0);
-                if (std::abs(next_offset) <= max_bd) {
-                    si++;
-                    hi--;
-                    continue;
-                }
-            }
-
-            // Note not judged → missed
-            if (!note_judged) {
-                missed_notes_.push_back(&note);
-                missed_notes_count++;
-            }
-            si++;
+            // else: note ≥ POOR ms ahead → press ignored (no record).
         }
 
-        // Remaining notes beyond last hit → missed
+        // Notes after the last press on this lane → missed (POOR, value 1).
         while (si < notes.size()) {
-            size_t note_idx = notes[si];
-            const auto& note = timeline.notes[note_idx];
+            const auto& note = timeline.notes[notes[si]];
             missed_notes_.push_back(&note);
             missed_notes_count++;
             si++;
@@ -305,12 +303,16 @@ void JudgementEngine::analyze(const Timeline& timeline,
 #endif
 
     // ── LN tail processing: find release events for matched LN notes ──
-    // Build a map from note index to its head HitResult
-    std::map<size_t, HitResult*> note_head_result;
-    for (auto& r : results_) {
+    // Map note index → INDEX into results_ (not a pointer): the loop below calls
+    // results_.push_back(), which can reallocate the vector and would invalidate
+    // any stored HitResult* (use-after-free). Indices remain valid across
+    // reallocation.
+    std::map<size_t, size_t> note_head_result;
+    for (size_t ri = 0; ri < results_.size(); ++ri) {
+        const auto& r = results_[ri];
         if (!r.is_release && r.note) {
             size_t note_idx = static_cast<size_t>(r.note - &timeline.notes[0]);
-            note_head_result[note_idx] = &r;
+            note_head_result[note_idx] = ri;
         }
     }
 
@@ -323,7 +325,7 @@ void JudgementEngine::analyze(const Timeline& timeline,
 
         auto head_it = note_head_result.find(i);
         if (head_it == note_head_result.end()) continue;
-        Judge head_judge = head_it->second->judge;
+        Judge head_judge = results_[head_it->second].judge;
 
         // Find the release event for this LN on the same BMS lane
         for (size_t ri = 0; ri < replay.hits.size(); ++ri) {
@@ -422,7 +424,11 @@ void JudgementEngine::analyze(const Timeline& timeline,
         for (size_t i = 0; i < compared; ++i) {
             uint8_t lr2_val = replay.lr2_judgements[i];
             Judge local_j = local_ordered[i].local_judge;
-            uint8_t local_val = judge_to_lr2_val(local_j);
+            // Empty POOR (a stray press with no note) → op210 value 0, not 1.
+            uint8_t local_val =
+                (local_ordered[i].note_idx == std::numeric_limits<size_t>::max())
+                    ? 0
+                    : judge_to_lr2_val(local_j);
 
             if (lr2_val != local_val) {
                 if (mismatch_count < kMaxMismatchLog) {
@@ -476,8 +482,31 @@ void JudgementEngine::analyze(const Timeline& timeline,
         if (mismatch_count == 0) {
             std::fprintf(stdout, "ALL JUDGMENTS MATCH replay op210\n");
         } else {
-            std::fprintf(stdout, "JUDGMENT MISMATCHES: %d / %zu compared\n",
+            std::fprintf(stdout, "JUDGMENT MISMATCHES: %d / %zu compared (position-aligned; desyncs on empty-POOR count)\n",
                          mismatch_count, compared);
+        }
+
+        // ── Per-note fidelity (order-robust): compare each note's judgement to the
+        //    NON-empty op210 entries (values 1-5 = exactly one per note), dropping the
+        //    value-0 empty-POORs on both sides so their count no longer desyncs it.
+        {
+            std::vector<uint8_t> by_note(timeline.notes.size(), 1); // default = missed POOR (1)
+            for (auto& r : results_) {
+                if (r.is_release || !r.note) continue;
+                size_t ni = static_cast<size_t>(r.note - &timeline.notes[0]);
+                if (ni < by_note.size()) by_note[ni] = judge_to_lr2_val(r.judge);
+            }
+            std::vector<uint8_t> lr2_notes;
+            lr2_notes.reserve(replay.lr2_judgements.size());
+            for (uint8_t v : replay.lr2_judgements) if (v != 0) lr2_notes.push_back(v);
+
+            size_t cmp = (std::min)(by_note.size(), lr2_notes.size());
+            int nmis = 0;
+            for (size_t i = 0; i < cmp; ++i) if (by_note[i] != lr2_notes[i]) nmis++;
+            std::fprintf(stdout,
+                "Per-note fidelity: notes=%zu  lr2_note_judgements=%zu  mismatches=%d (%.2f%%)\n",
+                by_note.size(), lr2_notes.size(), nmis,
+                cmp ? 100.0 * nmis / static_cast<double>(cmp) : 0.0);
         }
         std::fprintf(stdout, "==============================\n\n");
     }
@@ -496,6 +525,23 @@ void JudgementEngine::analyze(const Timeline& timeline,
         }
         if (r.fast) fst++;
         if (r.slow) slw++;
+    }
+
+    // → Per-grade mean offset (diagnostic). A fast-leaning player makes the OVERALL
+    //   mean very negative, but the PGREAT-only mean should still sit near 0 if our
+    //   note timing matches the game (RE doc measured LR2 PG ≈ -0.6 ms). A large
+    //   PG-only mean would instead indicate a systematic note-time error.
+    {
+        double sumg[4] = {0,0,0,0}; int ng[4] = {0,0,0,0};
+        auto gi = [](Judge j){ switch (j) { case Judge::PGREAT: return 0; case Judge::GREAT: return 1;
+            case Judge::GOOD: return 2; case Judge::BAD: return 3; default: return -1; } };
+        for (auto& r : results_) {
+            if (r.is_release || !r.note) continue;
+            int k = gi(r.judge); if (k >= 0) { sumg[k] += r.offset_ms; ng[k]++; }
+        }
+        std::fprintf(stdout, "Per-grade mean offset (ms): PG=%.2f(n=%d) GR=%.2f(n=%d) GD=%.2f(n=%d) BD=%.2f(n=%d)\n",
+            ng[0]?sumg[0]/ng[0]:0.0, ng[0], ng[1]?sumg[1]/ng[1]:0.0, ng[1],
+            ng[2]?sumg[2]/ng[2]:0.0, ng[2], ng[3]?sumg[3]/ng[3]:0.0, ng[3]);
     }
     // Missed notes count as POOR (normal notes only, not LN)
     for (auto* n : missed_notes_) {

@@ -493,7 +493,7 @@ void ChartView::render_controls_inline() {
             ImGui::Text("System: %s", judge_engine_.system() == JudgeSystem::LR2 ? "LR2" : "beatoraja");
             ImGui::Text("Rank:   %s (%d)", JudgeProfile::rank_string(rank), r);
             ImGui::Text("PG: %d ms  GR: %d ms  GD: %d ms", w.pg, w.gr, w.gd);
-            ImGui::Text("BD: %d ms  POOR: %d ms", w.pg > w.bd ? w.bd : 0, w.poor);
+            ImGui::Text("BD: %d ms  POOR: %d ms", w.bd, w.poor);
         }
     }
 }

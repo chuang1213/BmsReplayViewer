@@ -16,7 +16,11 @@ static T read_le(const uint8_t* p) {
 }
 
 static uint8_t lr2_op_to_lane(int op) {
-    if (op == 0 || op == 10) return 0;
+    // op 0 = scratch (P1 buttonInput[0], the judged turntable lane).
+    // op 10 = the OTHER turntable direction → ReplayDataToInput stores it in
+    //   p1_buttonInput[10], which the P1 judge loop (i=0..9, Scene04_Play.cpp:1252)
+    //   never reads. So op 10 is NOT judged in LR2 — ignore it here too.
+    if (op == 0)             return 0;
     if (op >= 1 && op <= 7)  return static_cast<uint8_t>(op);
     return 0xFF;
 }
