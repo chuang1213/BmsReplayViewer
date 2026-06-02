@@ -12,8 +12,8 @@ WelcomeAction render_welcome_panel() {
 
     ImGui::BulletText("Supported formats:");
     ImGui::Indent();
-    ImGui::BulletText("Charts:  .bms  .bme  .bml  .bmson(not tested)");
-    ImGui::BulletText("Replays: .brd  .lr2rep");
+    ImGui::BulletText("Charts:  .bms  .bme  .bml  (.bmson not tested)");
+    ImGui::BulletText("Replays: .brd(judge count is buggy)  .lr2rep");
     ImGui::Unindent();
     ImGui::Spacing();
 
@@ -30,8 +30,7 @@ WelcomeAction render_welcome_panel() {
     ImGui::BulletText("Chart Analysis");
     ImGui::BulletText("Replay Overlay");
     ImGui::BulletText("Video Export");
-    ImGui::BulletText("This is an early prototype, please join QQ group:1023446556 or email me for bug reports/feature requests");
-    ImGui::Text("WARNING: The judge function in this version is BROKEN, please do NOT trust it!");
+    ImGui::BulletText("This is an early prototype, please create an issue or email me for bug reports/feature requests");
     ImGui::Unindent();
     ImGui::Spacing();
 

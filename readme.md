@@ -1,8 +1,18 @@
+## 简介
+BMV是一款让可以让你通过导入bmx文件和回放文件来实现对自己游玩的全面复盘和分析，现在支持：
+回放显示
+判定计算
+视频导出（buggy）
+
 ## Todo list
-1. 判定不准(raja和LR2都是)
-2. 旧版本oraja回放支持（0.8.7~0.8.8）
-3. 自然滚动
-4. 分开拖谱和回放有点麻烦
-5. PGREAT颜色
-6. 中文路径会炸（UTF-8，详见 ARCHIVE.md §0 待办）
-7. 回放解析解耦重构（方案见 ARCHIVE.md ADR-22）
+分开拖谱和回放有点麻烦（未来支持传参和目录内hash筛选）
+回放解析解耦重构（方案见 ARCHIVE.md ADR-22）
+谱面波形图（没想好放哪儿）
+
+## 现有缺陷
+beatoraja判定不准
+旧版本oraja回放支持（仅支持0.8.8）
+
+## Early testers:
+Steve58313 LED Yuntian52 Reiaki秋
+Thank you all

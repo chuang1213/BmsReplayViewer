@@ -92,8 +92,7 @@ void ChartView::handle_input() {
         pixels_per_tick_ = std::max(0.005, std::min(2.0,
             pixels_per_tick_ * (1.0 + static_cast<double>(wheel) * 0.12)));
     } else {
-        double scroll_speed = static_cast<double>(scroll_distance_) / pixels_per_tick_;
-        current_tick_ -= static_cast<double>(wheel) * scroll_speed;
+        current_tick_ -= static_cast<double>(wheel) * static_cast<double>(scroll_distance_);
     }
 
     if (timeline_) {
@@ -405,7 +404,15 @@ void ChartView::render_controls_inline() {
     ImGui::SeparatorText("Appearance");
     ImGui::SliderFloat("Note Speed", &note_speed_, 0.5f, 2.0f, "%.2fx");
     ImGui::SliderFloat("Note Thickness", &note_thickness_, 1.0f, 20.0f, "%.0f");
-    ImGui::SliderInt("Scroll Distance", &scroll_distance_, 480, 7680);
+    static const int kScrollTickValues[] = { 3840, 7680, 11520, 15360 };
+    static const char* kScrollLabels[]    = { "0.5 measure", "1 measure", "1.5 measures", "2 measures" };
+    int scroll_idx = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (scroll_distance_ >= kScrollTickValues[i]) scroll_idx = i;
+    }
+    if (ImGui::Combo("Scroll Distance", &scroll_idx, kScrollLabels, IM_ARRAYSIZE(kScrollLabels))) {
+        scroll_distance_ = kScrollTickValues[scroll_idx];
+    }
     ImGui::Checkbox("Auto Follow Playback", &auto_follow_playback_);
 
     ImGui::SeparatorText("Judge System");
