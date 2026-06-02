@@ -44,6 +44,8 @@ add_executable(bmv
     src/app/application.cpp
     src/app/panels/chart_view.cpp
     src/app/panels/video_export.cpp
+    src/app/panels/welcome_panel.cpp
+    src/app/panels/about_panel.cpp
     src/analysis/judgement_engine.cpp
     src/judge/judge_profile.cpp
     libs/miniz/miniz_tinfl.c

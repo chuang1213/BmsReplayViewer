@@ -1,6 +1,8 @@
 #include "application.h"
 #include "format/bms_parser.h"
 #include "replay/lr2rep_parser.h"
+#include "app/panels/welcome_panel.h"
+#include "app/panels/about_panel.h"
 #include "json.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -224,49 +226,6 @@ void Application::on_drop(GLFWwindow* window, int count, const char** paths) {
     for (auto& c : charts)  app->load_chart_file(c);
     for (auto& r : replays) app->load_replay_file(r);
 }
-void Application::render_welcome_tab() {
-    ImGui::Text("BMV -- BMS Visualizer");
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    ImGui::BulletText("Supported formats:");
-    ImGui::Indent();
-    ImGui::BulletText("Charts:  .bms  .bme  .bml  .bmson");
-    ImGui::BulletText("Replays: .brd  .lr2rep");
-    ImGui::Unindent();
-    ImGui::Spacing();
-
-    ImGui::BulletText("LR2 RANDOM / MIRROR currently supported.");
-
-    ImGui::Text("Quick Start:");
-    ImGui::Indent();
-    ImGui::BulletText("Drag & drop a chart file onto the window");
-    ImGui::BulletText("Drag & drop a .brd file to load replay data");
-    ImGui::BulletText("Use File > Open Chart... or Open Replay...");
-    ImGui::Unindent();
-    ImGui::Spacing();
-
-    ImGui::Text("Features:");
-    ImGui::Indent();
-    ImGui::BulletText("Chart Analysis");
-    ImGui::BulletText("Replay Overlay");
-    ImGui::BulletText("Judge Analysis");
-    ImGui::BulletText("Video Export");
-    ImGui::Unindent();
-    ImGui::Spacing();
-
-    ImGui::Separator();
-    if (ImGui::Button("Open Chart...", ImVec2(140, 0))) {
-        std::string p = open_file_dialog(chart_filter, "Open BMS Chart");
-        if (!p.empty()) load_chart_file(p);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Open Replay...", ImVec2(140, 0))) {
-        std::string p = open_file_dialog(replay_filter, "Open Replay File");
-        if (!p.empty()) load_replay_file(p);
-    }
-}
-
 void Application::render_analyzer_tab() {
     if (chart_loaded_) {
         chart_view_.render_analyzer();
@@ -286,32 +245,6 @@ void Application::render_analyzer_tab() {
     }
 }
 
-void Application::render_about_tab() {
-    ImGui::Text("BMV -- BMS Visualizer");
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    ImGui::Text("Version: 2.0.3");
-    ImGui::Text("Build:   " __DATE__);
-    ImGui::Text("Phase:   2.4.1");
-    ImGui::Text("By Chuang1227");
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    ImGui::Text("Third-party Libraries:");
-    ImGui::Indent();
-    ImGui::BulletText("Dear ImGui (ocornut)");
-    ImGui::BulletText("GLFW (glfw.org)");
-    ImGui::BulletText("nlohmann/json");
-    ImGui::BulletText("zlib (gzip)");
-    ImGui::BulletText("Dr.Libs (base64)");
-    ImGui::Unindent();
-    ImGui::Spacing();
-
-    ImGui::Text("A replay analysis and visualization tool\nfor BMS / IIDX simulation.");
-}
-
 void Application::render_tab_bar() {
     ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -329,7 +262,14 @@ void Application::render_tab_bar() {
         auto wf = (pending_tab_ == 0) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
         if (ImGui::BeginTabItem("Welcome", nullptr, wf)) {
             active_tab_ = 0;
-            render_welcome_tab();
+            auto wa = render_welcome_panel();
+            if (wa == WelcomeAction::OpenChart) {
+                std::string p = open_file_dialog(chart_filter, "Open BMS Chart");
+                if (!p.empty()) load_chart_file(p);
+            } else if (wa == WelcomeAction::OpenReplay) {
+                std::string p = open_file_dialog(replay_filter, "Open Replay File");
+                if (!p.empty()) load_replay_file(p);
+            }
             ImGui::EndTabItem();
         }
 
@@ -343,7 +283,7 @@ void Application::render_tab_bar() {
         auto bf = (pending_tab_ == 2) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
         if (ImGui::BeginTabItem("About", nullptr, bf)) {
             active_tab_ = 2;
-            render_about_tab();
+            render_about_panel();
             ImGui::EndTabItem();
         }
 

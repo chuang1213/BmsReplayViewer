@@ -45,9 +45,7 @@ private:
     void reload_chart_view();
 
     void render_tab_bar();
-    void render_welcome_tab();
     void render_analyzer_tab();
-    void render_about_tab();
     void render_menu_bar();
 
     std::string open_file_dialog(const char* filter_pattern, const char* title);
