@@ -1,3 +1,0 @@
-D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/glfw-populate.dir
-D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/ALL_BUILD.dir
-D:/BMV/BMV/build/_deps/glfw-subbuild/CMakeFiles/ZERO_CHECK.dir

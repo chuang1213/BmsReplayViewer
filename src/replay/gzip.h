@@ -60,30 +60,38 @@ inline std::vector<uint8_t> decompress(const void* data, size_t size) {
                      (static_cast<uint32_t>(footer[6]) << 16) |
                      (static_cast<uint32_t>(footer[7]) << 24);
 
-    size_t out_cap = isize ? isize : (deflate_size * 4 + 64);
-    std::vector<uint8_t> out(out_cap);
+    static constexpr size_t kMaxDecompress = 256ULL * 1024 * 1024; // 256 MB cap
+    static constexpr int    kMaxRetries    = 6;                    // 1x,2x,4x,8x,16x,32x
 
-    size_t written = tinfl_decompress_mem_to_mem(
-        out.data(), out_cap,
-        deflate_start, deflate_size,
-        0 // raw DEFLATE, no zlib/gzip header
-    );
-
-    if (written == TINFL_DECOMPRESS_MEM_TO_MEM_FAILED) {
-        out.resize(out_cap * 2);
-        written = tinfl_decompress_mem_to_mem(
-            out.data(), out_cap * 2,
-            deflate_start, deflate_size,
-            0
-        );
-        if (written == TINFL_DECOMPRESS_MEM_TO_MEM_FAILED) {
-            std::fprintf(stderr, "[gzip] tinfl_decompress_mem_to_mem failed\n");
-            return {};
-        }
+    if (isize > kMaxDecompress) {
+        std::fprintf(stderr, "[gzip] isize too large: %u (max %zu)\n",
+                     isize, kMaxDecompress);
+        return {};
     }
 
-    out.resize(written);
-    return out;
+    size_t out_cap = isize ? isize : std::min(deflate_size * 4 + 64, kMaxDecompress);
+
+    for (int retry = 0; retry < kMaxRetries; ++retry) {
+        std::vector<uint8_t> out(out_cap);
+
+        size_t written = tinfl_decompress_mem_to_mem(
+            out.data(), out_cap,
+            deflate_start, deflate_size,
+            0 // raw DEFLATE, no zlib/gzip header
+        );
+
+        if (written != TINFL_DECOMPRESS_MEM_TO_MEM_FAILED) {
+            out.resize(written);
+            return out;
+        }
+
+        out_cap *= 2;
+        if (out_cap > kMaxDecompress) break;
+    }
+
+    std::fprintf(stderr, "[gzip] tinfl_decompress_mem_to_mem failed after %d retries\n",
+                 kMaxRetries);
+    return {};
 }
 
 } // namespace bmv::gzip

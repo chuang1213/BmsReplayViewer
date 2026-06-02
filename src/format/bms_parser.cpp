@@ -44,14 +44,9 @@ int BmsParser::base36_digit(char c) {
 }
 
 int BmsParser::decode_base36_byte(const char* ptr) {
+    if (!is_base36_digit(ptr[0]) || !is_base36_digit(ptr[1])) return -1;
     int hi = base36_digit(ptr[0]);
     int lo = base36_digit(ptr[1]);
-    if (!is_base36_digit(ptr[0]) || !is_base36_digit(ptr[1])) {
-        // fallback: try to parse as if it's a base-36 pair; if both valid→ ok
-        // if ptr[0] is digit but ptr[1] is not, return just hi (single digit)
-        if (is_base36_digit(ptr[0]) && !is_base36_digit(ptr[1])) return hi;
-        return 0;
-    }
     return hi * 36 + lo;
 }
 
@@ -62,6 +57,10 @@ std::vector<int> BmsParser::decode_channel_values(const std::string& raw) {
     result.reserve(len / 2);
     for (size_t i = 0; i < len; i += 2) {
         int val = decode_base36_byte(&raw[i]);
+        if (val < 0) {
+            std::fprintf(stderr, "[warn] decode_channel_values: invalid base36 pair at offset %zu\n", i);
+            continue;
+        }
         result.push_back(val);
     }
     return result;
@@ -89,9 +88,9 @@ RawChartData BmsParser::parse(const std::string& filepath)
         if (!line.empty() && line.back() == '\r') line.pop_back();
 
         if (line.empty()) continue;
+        if (line.size() < 2) continue;
         if (line[0] == '*') continue;
         if (line[0] != '#') continue;
-        if (line.size() < 2) continue;
 
         // --- Header / definition lines: #KEY value ---
         if (line[1] >= 'A' && line[1] <= 'Z') {

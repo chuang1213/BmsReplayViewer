@@ -60,18 +60,30 @@ static int run_cli(int argc, char* argv[]) {
 
     if (!replay_path.empty()) {
         std::printf("Parsing replay: %s\n", replay_path.c_str());
-        bmv::BrdParser brd;
-        replay_data = brd.parse(replay_path, timeline.time_map);
+        auto dot = replay_path.rfind('.');
+        bool is_lr2 = false;
+        if (dot != std::string::npos) {
+            std::string ext = replay_path.substr(dot);
+            for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            is_lr2 = (ext == ".lr2rep");
+        }
+        if (is_lr2) {
+            bmv::Lr2RepParser lr2;
+            replay_data = lr2.parse(replay_path, timeline.time_map);
+        } else {
+            bmv::BrdParser brd;
+            replay_data = brd.parse(replay_path, timeline.time_map);
+        }
         if (!replay_data.hits.empty()) {
             replay_ptr = &replay_data;
-            std::printf("  Hits: %zu, unmatched: %d, shuffle: %s\n",
-                         replay_data.hits.size(), replay_data.unmatched,
+            std::printf("  Hits: %zu, shuffle: %s\n",
+                         replay_data.hits.size(),
                          replay_data.has_shuffle ? "YES" : "NO");
 
-            // Judge audit (CLI test)
+            // Judge audit (CLI test) — auto-detect system from replay format
             bmv::JudgementEngine je;
-            je.set_system(bmv::JudgeSystem::Beatoraja);
-            je.analyze(timeline, replay_data, timeline.rank);
+            je.set_system(is_lr2 ? bmv::JudgeSystem::LR2 : bmv::JudgeSystem::Beatoraja);
+            je.analyze(timeline, replay_data);
         }
     }
 

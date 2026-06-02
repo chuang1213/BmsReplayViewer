@@ -8,6 +8,7 @@ struct TimeMapEntry {
     tick_t tick;                  // tick at which this segment starts
     double bpm;                   // effective bpm (> 0) in this segment
     double accumulated_seconds;   // total seconds accumulated at this tick
+    double stop_seconds = 0.0;    // non-zero if this entry ends a STOP
 };
 
 class TimeMap {

@@ -63,8 +63,6 @@ private:
         void init(int w, int h);
         void fill(uint32_t color);
         void fill_rect(int x, int y, int w, int h, uint32_t color);
-        void fill_rect_clipped(int x, int y, int w, int h, uint32_t color,
-                               int clip_x, int clip_y, int clip_w, int clip_h);
     };
 
     PixelBuffer buf_;
@@ -92,15 +90,9 @@ private:
     void draw_char(int x, int y, char ch, uint32_t color);
     void draw_text(int x, int y, const std::string& text, uint32_t color);
 
-    void draw_measure_backgrounds();
-    void draw_grids();
-    void draw_measure_separators();
-    void draw_lane_separators();
-    void draw_notes(const Timeline& tl);
     void draw_bpm_lines(const Timeline& tl);
     void draw_stop_lines(const Timeline& tl);
     void draw_measure_numbers(const Timeline& tl);
-    void draw_replay_hits(const ReplayData& replay);
 };
 
 } // namespace bmv

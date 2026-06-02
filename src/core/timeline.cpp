@@ -109,6 +109,7 @@ Timeline build_timeline(const RawChartData& raw)
             case 0x15: return 5;  // K5
             case 0x18: return 6;  // K6
             case 0x19: return 7;  // K7
+            // 0x17 (Scratch right) intentionally skipped for 7K; falls through to default
             default: return -1;
         }
     };
@@ -273,6 +274,7 @@ Timeline build_timeline(const RawChartData& raw)
     std::sort(tl.stops.begin(), tl.stops.end(),
         [](const StopEvent& a, const StopEvent& b) { return a.tick < b.tick; });
 
+#ifdef BMV_DEBUG
     // ================ BPM SOURCE AUDIT ================
     int bpm_invalid = 0;
     std::fprintf(stdout, "\n=== BPM Source Audit ===\n");
@@ -313,6 +315,7 @@ Timeline build_timeline(const RawChartData& raw)
     } else {
         std::fprintf(stdout, "Status:   WARNING — %d orphan LNOBJ markers\n", total_yy_orphan);
     }
+#endif
 
     // build measure lines from the map
     for (auto& mi : measure_map) {

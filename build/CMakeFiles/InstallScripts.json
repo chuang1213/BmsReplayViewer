@@ -1,9 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"D:/BMV/BMV/build/cmake_install.cmake",
-		"D:/BMV/BMV/build/_deps/glfw-build/cmake_install.cmake",
-		"D:/BMV/BMV/build/_deps/glfw-build/src/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

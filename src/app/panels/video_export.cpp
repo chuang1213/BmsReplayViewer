@@ -1,4 +1,5 @@
 #include "video_export.h"
+#include "render/core_renderer.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -78,175 +79,103 @@ struct PixBuf {
     }
 };
 
-static int ex_lane_to_column(int render_lane, bool is_2p) {
-    if (!is_2p) return render_lane;
-    return (render_lane == 0) ? 7 : (render_lane - 1);
-}
+// ── Shared rendering via CoreRenderer ──
 
-// ── Software chart renderer ──
+void VideoExporter::render_frame_to_buf(uint8_t* buf_data) {
+    PixBuf pb;
+    pb.data = buf_data;
+    pb.w    = cfg_.width;
+    pb.h    = cfg_.height;
 
-static void render_export_frame(
-    PixBuf& buf,
-    const Timeline& tl, const ReplayData* replay,
-    tick_t cur_tick, double ppt, bool is_2p, bool show_replay,
-    bool green_screen,
-    const int* lane_map)
-{
-    constexpr int    kNumLanes      = 8;
-    constexpr float  kPadBottom     = 50.0f;
-    constexpr float  kLaneW         = 44.0f;
-    constexpr float  kNoteW         = 28.0f;
-    constexpr float  kNoteMinH      = 4.0f;
-    constexpr float  kBoxW          = 20.0f;
-    constexpr tick_t kBeatT         = 1920;
-    constexpr tick_t kMeasureT      = 7680;
-
-    float chart_x0 = 40.0f;
-    float jy = static_cast<float>(buf.h) - kPadBottom; // judgment line
-
-    auto screen_y = [&](tick_t t) -> float {
-        float dt = static_cast<float>(t) - static_cast<float>(cur_tick);
-        return jy - dt * static_cast<float>(ppt);
+    // Viewport adapter: tick → pixel Y (camera-relative)
+    struct FrameViewport : public Viewport {
+        tick_t cur_tick;
+        double ppt;
+        float  jy;
+        int y_at(tick_t tick) const override {
+            float dt = static_cast<float>(tick) - static_cast<float>(cur_tick);
+            return static_cast<int>(jy - dt * static_cast<float>(ppt));
+        }
     };
 
-    // ── Background ──
-    buf.fill(green_screen ? C_GREEN : C_BG_FULL);
+    // Buffer adapter: uint32_t → RGB bytes
+    struct VideoBuf : public PixelBuf {
+        PixBuf* pb = nullptr;
+        void fill_rect(int x, int y, int w, int h, uint32_t color) override {
+            RGB rgb;
+            rgb.r = static_cast<uint8_t>(color & 0xFF);
+            rgb.g = static_cast<uint8_t>((color >> 8) & 0xFF);
+            rgb.b = static_cast<uint8_t>((color >> 16) & 0xFF);
+            pb->fill_rect(x, y, w, h, rgb);
+        }
+    };
 
-    // Viewport tick range for culling
-    tick_t min_tick = static_cast<tick_t>(cur_tick - kPadBottom / ppt);
-    tick_t max_tick = static_cast<tick_t>(cur_tick + (buf.h - kPadBottom) / ppt);
+    FrameViewport vp;
+    vp.width    = pb.w;
+    vp.height   = pb.h;
+    vp.cur_tick = static_cast<tick_t>(cur_tick_);
+    vp.ppt      = ppt_;
+    vp.jy       = static_cast<float>(pb.h) - 50.0f;
+
+    VideoBuf vbuf;
+    vbuf.pb = &pb;
+
+    float kPadBottom = 50.0f;
+    tick_t min_tick = static_cast<tick_t>(cur_tick_ - kPadBottom / ppt_);
+    tick_t max_tick = static_cast<tick_t>(cur_tick_ + (pb.h - kPadBottom) / ppt_);
     if (min_tick < 0) min_tick = 0;
 
-    // ── Measure backgrounds + grid ──
-    {
-        tick_t m_begin = min_tick / kMeasureT;
-        tick_t m_end   = (max_tick / kMeasureT) + 1;
-        float x0 = chart_x0;
-        float x1 = x0 + kNumLanes * kLaneW;
+    // Color palette (convert from video_export's RGB constants to uint32_t)
+    auto to_u32 = [](RGB c) -> uint32_t {
+        return static_cast<uint32_t>(c.r) | (static_cast<uint32_t>(c.g) << 8)
+               | (static_cast<uint32_t>(c.b) << 16) | 0xFF000000u;
+    };
 
-        for (tick_t m = m_begin; m <= m_end; ++m) {
-            RGB bg = (m % 2 == 0) ? C_BG_A : C_BG_B;
-            float y0 = screen_y(m * kMeasureT + kMeasureT);
-            float y1 = screen_y(m * kMeasureT);
-            if (!green_screen)
-                buf.fill_rect(static_cast<int>(x0), static_cast<int>(y1),
-                              static_cast<int>(x1 - x0),
-                              static_cast<int>(y0 - y1), bg);
-        }
+    GridColors gc;
+    gc.bg_full   = to_u32(cfg_.green_screen ? C_GREEN : C_BG_FULL);
+    gc.bg_a      = to_u32(C_BG_A);
+    gc.bg_b      = to_u32(C_BG_B);
+    gc.measure   = to_u32(C_MEASURE);
+    gc.fourth    = to_u32(C_GRID_4);
+    gc.eighth    = to_u32(C_GRID_8);
+    gc.sixteenth = to_u32(C_GRID_16);
+    gc.lane      = to_u32(C_LANE);
+    gc.judgment  = to_u32(C_JUDGMENT);
 
-        // Grid lines
-        tick_t t_beg = (min_tick / kMeasureT) * kMeasureT;
-        tick_t t_end = (max_tick / kBeatT) * kBeatT + kBeatT;
-        for (tick_t t = t_beg; t <= t_end; t += kBeatT) {
-            int y = static_cast<int>(screen_y(t));
-            bool is_meas = (t % kMeasureT == 0);
-            RGB col = C_GRID_16;
-            int thk = 1;
-            if (is_meas) { col = C_MEASURE; thk = 2; }
-            else if ((t % (kBeatT * 4)) == 0) { col = C_GRID_4; thk = 1; }
-            else if ((t % (kBeatT * 2)) == 0) { col = C_GRID_8; thk = 1; }
-            buf.fill_rect(static_cast<int>(x0), y,
-                          static_cast<int>(x1 - x0), thk, col);
-        }
+    NoteColors nc;
+    nc.scratch = to_u32(C_SCRATCH);
+    nc.white   = to_u32(C_WHITE);
+    nc.blue    = to_u32(C_BLUE);
+    nc.ln_tail = to_u32(C_LN_TAIL);
 
-        // Lane separators (vertical)
-        for (int lane = 0; lane <= kNumLanes; ++lane) {
-            int lx = static_cast<int>(chart_x0 + lane * kLaneW);
-            int thk = (lane == 0 || lane == kNumLanes) ? 2 : 1;
-            buf.vline(lx, 0, buf.h, C_LANE);
-            // Note: vline thickness is always 1, so for 2px lines do fill_rect
-            if (thk == 2) buf.fill_rect(lx, 0, 2, buf.h, C_LANE);
-        }
+    float cx0 = 40.0f;
+    float lw  = 44.0f;
+    int   nl  = 8;
+    int   cw  = nl * static_cast<int>(lw);
 
-        // Judgment line
-        buf.fill_rect(static_cast<int>(x0), static_cast<int>(jy),
-                      static_cast<int>(x1 - x0), 2, C_JUDGMENT);
+    CoreRenderer::draw_background(vbuf, vp,
+        min_tick, max_tick, cx0, cw, nl, lw, gc);
+
+    // Build combined lane map including 2P shift if needed
+    int combined_map[8];
+    for (int i = 0; i < 8; ++i) {
+        int dl = lane_map_ ? lane_map_[i] : i;
+        if (is_2p_) dl = (dl == 0) ? 7 : (dl - 1);
+        combined_map[i] = dl;
     }
 
-    // ── Notes ──
-    float ppt_f = static_cast<float>(ppt);
-    for (size_t i = 0; i < tl.notes.size(); ++i) {
-        const auto& n = tl.notes[i];
-        if (n.end_tick < min_tick && n.tick < min_tick) continue;
-        if (n.tick > max_tick) continue;
+    CoreRenderer::draw_notes(vbuf, vp,
+        timeline_->notes, combined_map,
+        min_tick, max_tick, cx0, lw, 28.0f, 4.0f, ppt_,
+        nc, nl);
 
-        int render_lane = lane_map[n.lane];
-        if (render_lane >= kNumLanes) continue;
-        int col = ex_lane_to_column(render_lane, is_2p);
-
-        RGB color;
-        switch (n.lane) {
-            case 0: color = C_SCRATCH; break;
-            case 1: case 3: case 5: case 7: color = C_WHITE; break;
-            default: color = C_BLUE; break;
-        }
-
-        int cx = static_cast<int>(chart_x0 + col * kLaneW + (kLaneW - kNoteW) * 0.5f);
-        int cy = static_cast<int>(screen_y(n.tick));
-        int nh = std::max(static_cast<int>(kNoteMinH),
-                          static_cast<int>(ppt_f * 6.0f));
-        int ny = cy - nh / 2;
-        buf.fill_rect(cx, ny, static_cast<int>(kNoteW), nh, color);
-
-        // LN body
-        if (n.end_tick > n.tick) {
-            int body_x  = cx + static_cast<int>(kNoteW * 0.3f);
-            int body_w  = static_cast<int>(kNoteW * 0.4f);
-            int tail_y  = static_cast<int>(screen_y(n.end_tick));
-            int body_y0 = cy - nh / 2 + nh / 2;
-            int body_y1 = tail_y;
-
-            int vis_top = static_cast<int>(screen_y(max_tick));
-            int vis_bot = static_cast<int>(screen_y(min_tick));
-            if (body_y1 > vis_bot) body_y1 = vis_bot;
-            if (body_y0 < vis_top) body_y0 = vis_top;
-
-            if (body_y1 < body_y0) {
-                buf.fill_rect(body_x, body_y1, body_w, body_y0 - body_y1, color);
-            }
-
-            int tail_mark_y = tail_y - 1;
-            if (tail_mark_y < vis_top) tail_mark_y = vis_top;
-            if (tail_mark_y + 3 > vis_bot) tail_mark_y = vis_bot - 3;
-            buf.fill_rect(cx, tail_mark_y, static_cast<int>(kNoteW), 3, C_LN_TAIL);
-        }
-    }
-
-    // ── Replay hits ──
-    if (show_replay && replay) {
-        for (size_t i = 0; i < replay->hits.size(); ++i) {
-            const auto& hit = replay->hits[i];
-            if (hit.tick_end < min_tick && hit.tick_start < min_tick) continue;
-            if (hit.tick_start > max_tick) continue;
-            if (hit.lane >= static_cast<uint8_t>(kNumLanes)) continue;
-
-            int col = ex_lane_to_column(hit.lane, is_2p);
-
-            tick_t ts = hit.tick_start;
-            tick_t te = (hit.tick_end > hit.tick_start) ? hit.tick_end
-                                                         : (hit.tick_start + 1);
-
-            int sy0 = static_cast<int>(screen_y(ts));
-            int sy1 = static_cast<int>(screen_y(te));
-            int vtop = static_cast<int>(screen_y(max_tick));
-            int vbot = static_cast<int>(screen_y(min_tick));
-            if (sy1 > vbot) sy1 = vbot;
-            if (sy0 < vtop) sy0 = vtop;
-
-            int bh = sy0 - sy1;
-            int min_h = std::max(2, static_cast<int>(ppt_f * 4.0f));
-            if (bh < min_h) bh = min_h;
-
-            int bx = static_cast<int>(chart_x0 + col * kLaneW
-                      + (kLaneW - kBoxW) * 0.5f);
-            int by = sy1;
-
-            buf.hollow_rect(bx, by, static_cast<int>(kBoxW), bh, C_REPLAY, 1);
-        }
+    if (show_replay_ && replay_) {
+        CoreRenderer::draw_replay_hits(vbuf, vp,
+            replay_->hits,
+            min_tick, max_tick, cx0, lw, 20.0f, ppt_, nl,
+            to_u32(C_REPLAY));
     }
 }
-
-// ── VideoExporter ──
 
 VideoExporter::~VideoExporter() {
     cancel_export();
@@ -325,17 +254,6 @@ void VideoExporter::process_frame() {
     } else {
         progress_ = static_cast<float>(current_frame_) / total_frames_;
     }
-}
-
-void VideoExporter::render_frame_to_buf(uint8_t* buf) {
-    PixBuf pb;
-    pb.data = buf;
-    pb.w    = cfg_.width;
-    pb.h    = cfg_.height;
-
-    render_export_frame(pb, *timeline_, replay_,
-        static_cast<tick_t>(cur_tick_), ppt_,
-        is_2p_, show_replay_, cfg_.green_screen, lane_map_);
 }
 
 void VideoExporter::render_ui() {

@@ -60,7 +60,9 @@ void TimeMap::build(const std::vector<BpmEvent>& bpms,
             current_bpm  = p.bpm;
         }
 
-        entries_.push_back({current_tick, current_bpm, accumulated_sec});
+        TimeMapEntry entry = {current_tick, current_bpm, accumulated_sec};
+        if (p.is_stop) entry.stop_seconds = p.stop_beats * 60.0 / current_bpm;
+        entries_.push_back(entry);
     }
 }
 
@@ -96,6 +98,12 @@ tick_t TimeMap::second_to_tick(double seconds) const
 
     const auto& entry = *it;
     double remaining_sec = seconds - entry.accumulated_seconds;
+
+    // If this entry ends a STOP and the queried time is still within the stop,
+    // clamp to the stop's tick (no tick passage during STOP).
+    if (entry.stop_seconds > 0.0 && remaining_sec < entry.stop_seconds)
+        return entry.tick;
+
     double remaining_beat = remaining_sec * entry.bpm / 60.0;
     tick_t remaining_ticks = static_cast<tick_t>(remaining_beat * TPB);
 

@@ -67,14 +67,12 @@ void ChartView::set_data(const Timeline* timeline, const ReplayData* replay) {
 
         // Judgement: needs hits
         if (!replay_->hits.empty()) {
-            judge_engine_.analyze(*timeline_, *replay_, timeline_->rank);
+            judge_engine_.analyze(*timeline_, *replay_);
         }
     }
 }
 
-float ChartView::screen_y(tick_t tick) const {
-    ImVec2 win_pos  = ImGui::GetWindowPos();
-    ImVec2 win_size = ImGui::GetWindowSize();
+float ChartView::screen_y(tick_t tick, const ImVec2& win_pos, const ImVec2& win_size) const {
     float jy = win_pos.y + win_size.y - kPaddingBottom;
     float dt = static_cast<float>(tick) - static_cast<float>(current_tick_);
     return jy - dt * static_cast<float>(pixels_per_tick_);
@@ -125,8 +123,8 @@ void ChartView::draw_background(ImDrawList* dl, const ImVec2& win_pos,
 
     for (tick_t m = m_begin; m <= m_end; ++m) {
         ImU32 bg = (m % 2 == 0) ? COL_BG_A : COL_BG_B;
-        float y0 = screen_y(m * kMeasureTick + kMeasureTick);
-        float y1 = screen_y(m * kMeasureTick);
+        float y0 = screen_y(m * kMeasureTick + kMeasureTick, win_pos, win_size);
+        float y1 = screen_y(m * kMeasureTick, win_pos, win_size);
         dl->AddRectFilled(ImVec2(x0, y1), ImVec2(x1, y0), bg);
     }
 }
@@ -147,7 +145,7 @@ void ChartView::draw_grid_and_measures(ImDrawList* dl, const ImVec2& win_pos,
 
     for (tick_t t = t_begin; t <= t_end; t += kBeatTick) {
         bool is_measure = (t % kMeasureTick == 0);
-        float y = screen_y(t);
+        float y = screen_y(t, win_pos, win_size);
 
         if (is_measure) {
             dl->AddLine(ImVec2(x0, y), ImVec2(x1, y), COL_MEASURE, 2.0f);
@@ -207,7 +205,7 @@ void ChartView::draw_notes(ImDrawList* dl, const ImVec2& win_pos,
 
         float cx = win_pos.x + chart_x0() + column * kLaneWidth
                    + (kLaneWidth - kNoteWidth) * 0.5f;
-        float cy = screen_y(n.tick);
+        float cy = screen_y(n.tick, win_pos, win_size);
 
         float nh = std::max(kNoteMinHeight, note_thickness_);
         float ny = cy - nh * 0.5f;
@@ -217,12 +215,12 @@ void ChartView::draw_notes(ImDrawList* dl, const ImVec2& win_pos,
         if (n.end_tick > n.tick) {
             float bw = std::max(2.0f, note_thickness_ * 0.5f);
             float body_x  = cx + (kNoteWidth - bw) * 0.5f;
-            float tail_y  = screen_y(n.end_tick);
+            float tail_y  = screen_y(n.end_tick, win_pos, win_size);
             float body_y0 = cy - nh * 0.5f + nh * 0.5f;
             float body_y1 = tail_y;
 
-            float vis_top = screen_y(max_tick);
-            float vis_bot = screen_y(min_tick);
+            float vis_top = screen_y(max_tick, win_pos, win_size);
+            float vis_bot = screen_y(min_tick, win_pos, win_size);
             if (body_y1 > vis_bot) body_y1 = vis_bot;
             if (body_y0 < vis_top) body_y0 = vis_top;
 
@@ -280,7 +278,7 @@ void ChartView::draw_replay_hits(ImDrawList* dl, const ImVec2& win_pos,
 
         if (!hit.is_press) {
             float cx = win_pos.x + chart_x0() + column * kLaneWidth + kLaneWidth * 0.5f;
-            float cy = screen_y(t_start);
+            float cy = screen_y(t_start, win_pos, win_size);
             float sz = std::max(2.0f, note_thickness_ / 4.0f);
             ImU32 rel_col = IM_COL32(160, 160, 200, 180);
             dl->AddQuadFilled(
@@ -293,22 +291,22 @@ void ChartView::draw_replay_hits(ImDrawList* dl, const ImVec2& win_pos,
         if (replay_display_mode_ == ReplayDisplayMode::LineOnly) {
             float lx0 = win_pos.x + chart_x0() + column * kLaneWidth;
             float lx1 = lx0 + kLaneWidth;
-            float ly = screen_y(t_start);
+            float ly = screen_y(t_start, win_pos, win_size);
             dl->AddLine(ImVec2(lx0 + 2.0f, ly), ImVec2(lx1 - 2.0f, ly),
                         box_color, line_thk);
         } else if (replay_display_mode_ == ReplayDisplayMode::Marker) {
             float cx = win_pos.x + chart_x0() + column * kLaneWidth + kLaneWidth * 0.5f;
-            float cy = screen_y(t_start);
+            float cy = screen_y(t_start, win_pos, win_size);
             float sz = std::max(2.0f, note_thickness_ / 3.0f);
             dl->AddCircleFilled(ImVec2(cx, cy), sz, box_color);
         } else {
             tick_t t_end = (hit.tick_end > hit.tick_start) ? hit.tick_end
                                                             : (hit.tick_start + 1);
-            float sy0 = screen_y(t_start);
-            float sy1 = screen_y(t_end);
+            float sy0 = screen_y(t_start, win_pos, win_size);
+            float sy1 = screen_y(t_end, win_pos, win_size);
 
-            float vis_top = screen_y(max_tick);
-            float vis_bot = screen_y(min_tick);
+            float vis_top = screen_y(max_tick, win_pos, win_size);
+            float vis_bot = screen_y(min_tick, win_pos, win_size);
             if (sy1 > vis_bot) sy1 = vis_bot;
             if (sy0 < vis_top) sy0 = vis_top;
 
@@ -333,7 +331,7 @@ void ChartView::draw_replay_hits(ImDrawList* dl, const ImVec2& win_pos,
                 ? IM_COL32(128, 220, 255, 220)
                 : IM_COL32(255, 180, 180, 220);
             float lx1 = win_pos.x + chart_x0() + (column + 1) * kLaneWidth;
-            float ly = screen_y(t_start);
+            float ly = screen_y(t_start, win_pos, win_size);
             dl->AddText(ImVec2(lx1 + 3.0f, ly - 8.0f), label_col, buf);
         }
     }
@@ -363,7 +361,7 @@ void ChartView::draw_miss_notes(ImDrawList* dl, const ImVec2& win_pos,
 
         float cx = win_pos.x + chart_x0() + column * kLaneWidth
                    + (kLaneWidth - kNoteWidth) * 0.5f;
-        float cy = screen_y(n->tick);
+        float cy = screen_y(n->tick, win_pos, win_size);
         float nh = std::max(kNoteMinHeight, note_thickness_);
         float ny = cy - nh * 0.5f;
 
@@ -414,13 +412,13 @@ void ChartView::render_controls_inline() {
     if (ImGui::RadioButton("LR2", &js, 0)) {
         judge_engine_.set_system(JudgeSystem::LR2);
         if (timeline_ && replay_ && !replay_->hits.empty())
-            judge_engine_.analyze(*timeline_, *replay_, timeline_->rank);
+            judge_engine_.analyze(*timeline_, *replay_);
     }
     ImGui::SameLine();
     if (ImGui::RadioButton("beatoraja", &js, 1)) {
         judge_engine_.set_system(JudgeSystem::Beatoraja);
         if (timeline_ && replay_ && !replay_->hits.empty())
-            judge_engine_.analyze(*timeline_, *replay_, timeline_->rank);
+            judge_engine_.analyze(*timeline_, *replay_);
     }
 
     if (timeline_ && replay_ && !replay_->hits.empty()) {
@@ -436,6 +434,20 @@ void ChartView::render_controls_inline() {
         ImGui::Text("Offset: %.1f +/- %.1f ms",
                     s.mean_offset, s.stddev_offset);
     }
+
+#ifdef BMV_DEBUG
+    if (timeline_) {
+        int r = timeline_->rank;
+        if (r < 0) r = 0; if (r > 3) r = 3;
+        auto rank = static_cast<JudgeRank>(r);
+        const auto& w = JudgeProfile::get_window(judge_engine_.system(), rank);
+        ImGui::SeparatorText("Judge Config [DEBUG]");
+        ImGui::Text("System: %s", judge_engine_.system() == JudgeSystem::LR2 ? "LR2" : "beatoraja");
+        ImGui::Text("Rank:   %s (%d)", JudgeProfile::rank_string(rank), r);
+        ImGui::Text("PG: %d ms  GR: %d ms  GD: %d ms", w.pg, w.gr, w.gd);
+        ImGui::Text("BD: %d ms  POOR: %d ms", w.bd, w.poor);
+    }
+#endif
 
     if (replay_) {
         ImGui::SeparatorText("Replay");
@@ -513,6 +525,7 @@ void ChartView::render_analyzer() {
 
         dl->PopClipRect();
 
+#ifdef BMV_DEBUG
         // Debug overlay: replay mapping state
         {
             auto mode_name = [](LR2RandomMode m) -> const char* {
@@ -552,6 +565,7 @@ void ChartView::render_analyzer() {
             }
             ImGui::End();
         }
+#endif
 
         ImGui::Separator();
         if (timeline_) {

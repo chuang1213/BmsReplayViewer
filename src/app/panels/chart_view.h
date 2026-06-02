@@ -73,12 +73,12 @@ private:
     static constexpr float  kNoteWidth      = 28.0f;
     static constexpr float  kNoteMinHeight  = 4.0f;
     static constexpr float  kReplayBoxWidth = 20.0f;
-    static constexpr tick_t kBeatTick       = 1920;
-    static constexpr tick_t kMeasureTick    = 7680;
+    static constexpr tick_t kBeatTick       = TPB;
+    static constexpr tick_t kMeasureTick    = TICKS_PER_MEASURE;
 
     float   chart_x0()   const { return 8.0f; }
     float   chart_width() const { return kNumLanes * kLaneWidth; }
-    float   screen_y(tick_t tick) const;
+    float   screen_y(tick_t tick, const ImVec2& win_pos, const ImVec2& win_size) const;
 
     void draw_background(ImDrawList* dl, const ImVec2& win_pos, const ImVec2& win_size);
     void draw_grid_and_measures(ImDrawList* dl, const ImVec2& win_pos, const ImVec2& win_size);

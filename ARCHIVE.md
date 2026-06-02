@@ -1,8 +1,8 @@
 # BMV (BMS Viewer) — 开发归档文档
 
-> 最后更新: 2026-06-01
+> 最后更新: 2026-06-02
 > 语言: C++17 | 构建: CMake 3.20+ | 平台: Windows (MSVC) / Linux (GCC/Clang)
-> 总代码量: ~6,200 行 | 模块: core, format, render, replay, analysis, app
+> 总代码量: ~4,000 行 (src) | 版本: 2.0.3 | 模块: core, format, render, replay, judge, analysis, app
 > 当前阶段: Phase 2.5.1
 
 ---
@@ -42,58 +42,60 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
 ### 数据流（Phase 2.1）
 
 ```
-  ┌──────────────┐     ┌──────────────┐
-  │  BmsParser   │     │  BrdParser   │
-  │  (BMS/BME)   │     │  (BRD JSON)  │
-  └──────┬───────┘     └──────┬───────┘
-         │                    │
-         ▼                    ▼
-  ┌──────────────┐    ┌──────────────┐
-  │RawChartData   │    │  ReplayData  │
-  └──────┬───────┘    └──────┬───────┘
-         │                    │
-         ▼                    │
-  ┌──────────────┐            │
-  │build_timeline│            │
-  │  • MeasureInfo 表        │
-  │  • Ch02 变长度小节       │
-  │  • LNOBJ 状态机          │
-  │  • BPM source 追踪       │
-  └──────┬───────┘            │
-         │                    │
-         ▼                    │
-  ┌──────────────┐            │
-  │  Timeline    │            │
-  │  • notes[]   │            │
-  │  • bpm_changes[]        │
-  │  • stops[]   │            │
-  │  • measures[]│            │
-  │  • bgm[]     │            │
-  │  • time_map  │            │
-  └──────┬───────┘            │
-         │                    │
-         ├────────────────────┤
-         ▼                    ▼
+  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+  │  BmsParser   │     │  BrdParser   │     │ Lr2RepParser │
+  │  (BMS/BME)   │     │  (BRD JSON)  │     │ (.lr2rep)    │
+  └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+  │RawChartData   │    │  ReplayData  │    │  ReplayData  │
+  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘
+         │                    │                    │
+         ▼                    │                    │
+  ┌──────────────┐            │                    │
+  │build_timeline│            │                    │
+  │  • MeasureInfo 表        │                    │
+  │  • Ch02 变长度小节       │                    │
+  │  • LNOBJ 状态机          │                    │
+  │  • BPM source 追踪       │                    │
+  └──────┬───────┘            │                    │
+         │                    │                    │
+         ▼                    │                    │
+  ┌──────────────┐            │                    │
+  │  Timeline    │            │                    │
+  │  • notes[]   │            │                    │
+  │  • bpm_changes[]        │                     │
+  │  • stops[]   │            │                    │
+  │  • measures[]│            │                    │
+  │  • bgm[]     │            │                    │
+  │  • time_map  │            │                    │
+  └──────┬───────┘            │                    │
+         │                    │                    │
+         ├────────────────────┴────────────────────┤
+         ▼                    ▼                    ▼
   ┌─────────────────────────────────────┐
   │       PngRenderer (CLI)             │
   │  • 静态 PNG 谱面渲染               │
-  │  • (Phase 1.5 核心逻辑保留)        │
+  │  • 共享 CoreRenderer 绘制原语       │
   └─────────────────────────────────────┘
   ┌─────────────────────────────────────┐
   │       ChartView (GUI)               │
-  │  • ImDrawList GPU 直刷             │
-  │  • 滚动 (Wheel) + 缩放 (Ctrl+Wheel)│
+  │  • ImDrawList GPU 直刷              │
+  │  • 滚动 (Wheel) + 缩放 (Ctrl+Wheel) │
   │  • 可见性裁剪 (Culling)             │
   │  • Random 乱序 Note 自动重排        │
-  │  • Replay 空心按键时长框叠加        │
+  │  • Replay 叠加 (Line/Box/Marker)    │
   │  • 1P/2P 布局实时切换              │
   │  • Replay 显示开关                  │
+  │  • 共享 CoreRenderer 绘制原语       │
   └─────────────────────────────────────┘
   ┌─────────────────────────────────────┐
   │       Controls Panel                │
   │  • Show Replay checkbox             │
   │  • 1P / 2P layout radio             │
   │  • Status readout                   │
+  │  • Replay Info (Format / Mode / Seed)│
   └─────────────────────────────────────┘
 ```
 
@@ -111,6 +113,7 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
 10. **判定引擎** — LR2 和 beatoraja 双系统判定，支持 Easy/Normal/Hard/VeryHard 四档
 11. **LR2 协议兼容** — 魔改 MT19937 (1998版) RNG + Fisher-Yates + inverse permutation 复刻 LR2Random
 12. **映射一致性** — display_to_bms 和 bms_to_display_ 由 JudgementEngine 统一管理，ChartView 通过 getter 同步，避免 Note 渲染与 Hit 判定出现 lane 偏差
+13. **共享渲染核心** — PngRenderer + ChartView + VideoExporter 共用 CoreRenderer 绘制原语（draw_background / draw_notes / draw_replay_hits），避免代码重复
 
 ---
 
@@ -119,33 +122,48 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
 ```
 src/
 ├── core/
-│   ├── types.h           ( 56行)  所有事件 struct + BpmSource 枚举 + MeasureInfo
-│   ├── time_map.h/cpp    (133行)  Tick ↔ Second 双向转换（BPM+STOP）
-│   └── timeline.h/cpp    (331行)  Timeline 容器 + build_timeline 工厂
+│   ├── types.h              ( 43行)  所有事件 struct + BpmSource 枚举 + MeasureInfo
+│   ├── time_map.h/cpp       (112行)  Tick ↔ Second 双向转换（BPM+STOP）
+│   └── timeline.h/cpp       (326行)  Timeline 容器 + build_timeline 工厂
 ├── format/
-│   ├── raw_data.h        ( 40行)  Parser 输出的中间结构
-│   └── bms_parser.h/cpp  (258行)  BMS/BME 解析器 (base-36 + hex 分流)
+│   ├── raw_data.h           ( 31行)  Parser 输出的中间结构
+│   └── bms_parser.h/cpp     (223行)  BMS/BME 解析器 (base-36 + hex 分流)
 ├── render/
-│   └── png_renderer.h/cpp (415行)  PNG 谱面渲染器 + Replay 叠加 + Random 乱序
+│   ├── core_renderer.h      (180行)  共享渲染核心 (抽象的 Viewport + PixelBuf + CoreRenderer)
+│   └── png_renderer.h/cpp   (339行)  PNG 谱面渲染器 + Replay 叠加 + Random 乱序
 ├── replay/
-│   ├── replay.h           ( 64行)  ReplayHit, ReplayData, ReplayFormat, LR2RandomMode,
-│   │                                IReplayParser, BrdParser, Lr2RepParser
-│   ├── brd_parser.cpp     (190行)  BRD 解析: GZIP→JSON→base64→GZIP→9-byte frames→State machine
-│   ├── lr2rep_parser.h    ( 15行)  Lr2RepParser 声明
-│   ├── lr2rep_parser.cpp  ( 97行)  LR2 解析: 12B 记录→op 分类→Header/Body→ReplayData
-│   ├── lr2_random.h       ( 26行)  LR2Random 类 (魔改 MT19937 1998版)
-│   ├── lr2_random.cpp     (111行)  播种 + generateMT + temperAll + Fisher-Yates + 硬校验
-│   ├── base64.h           ( 47行)  URL-Safe Base64 解码
-│   └── gzip.h             ( 86行)  原生 GZIP 解压 (miniz tinfl)
+│   ├── replay.h             (  4行)  聚合头文件 (include 以下三个)
+│   ├── replay_data.h        ( 38行)  ReplayHit, ReplayData, ReplayFormat, LR2RandomMode
+│   ├── ireplay_parser.h     ( 12行)  IReplayParser 抽象基类
+│   ├── brd_parser.h         ( 10行)  BrdParser 声明
+│   ├── brd_parser.cpp       (158行)  BRD 解析: GZIP→JSON→base64→GZIP→9-byte frames→State machine
+│   ├── lr2rep_parser.h      (  9行)  Lr2RepParser 声明
+│   ├── lr2rep_parser.cpp    ( 98行)  LR2 解析: 12B 记录→op 分类→Header/Body→ReplayData
+│   ├── lr2_random.h         ( 18行)  LR2Random 类 (魔改 MT19937 1998版)
+│   ├── lr2_random.cpp       ( 88行)  播种 + generateMT + temperAll + Fisher-Yates + 硬校验
+│   ├── base64.h             ( 38行)  URL-Safe Base64 解码
+│   └── gzip.h               ( 76行)  原生 GZIP 解压 (miniz tinfl)
+├── judge/
+│   └── judge_profile.h/cpp  ( 59行)  判定时机窗口配置 (Easy/Normal/Hard/VeryHard, LR2+Beatoraja)
 ├── analysis/
-│   └── judgement_engine.h/cpp (375行) 回放判定分析 (游标匹配 + diplay_to_bms 暴露)
+│   └── judgement_engine.h/cpp (580行) 回放判定分析 (游标匹配 + display_to_bms 暴露)
 ├── app/
-│   ├── application.h/cpp  (530行)  GLFW 窗口 + ImGui TabBar + 主循环 + Config 持久化
+│   ├── application.h/cpp    (501行)  GLFW 窗口 + ImGui TabBar + 主循环 + Config 持久化
 │   └── panels/
-│       ├── chart_view.h/cpp (560行)  GPU 谱面视窗 + 交互控件 + 判定叠加
-│       └── video_export.h/cpp (200行)  FFmpeg Pipe 视频导出
-└── main.cpp               (117行)  双模式入口: GUI (无参) / CLI (带参)
+│       ├── chart_view.h/cpp (569行)  GPU 谱面视窗 + 交互控件 + 判定叠加
+│       └── video_export.h/cpp (291行)  FFmpeg Pipe 视频导出
+└── main.cpp                 (125行)  双模式入口: GUI (无参) / CLI (带参)
 ```
+
+> **注意**: `replay.h` 已从原来的 64 行单体文件拆分为三个独立文件：
+> - `replay_data.h` (38行) — 数据结构定义
+> - `ireplay_parser.h` (12行) — 抽象接口
+> - `brd_parser.h` (10行) — BrdParser 声明
+> - `replay.h` (4行) — 聚合头文件，包含以上三个
+
+> **Phase 2.5.1 新增**:
+> - `src/judge/judge_profile.h/cpp` — 判定窗口独立模块，从 judgement_engine 中抽取
+> - `src/render/core_renderer.h` (180行) — 共享渲染核心，被 PngRenderer / ChartView / VideoExporter 复用
 
 第三方库 (vendored / FetchContent):
 
@@ -220,8 +238,8 @@ struct ReplayData {
     bool  has_shuffle = false;
     int   shuffle_pattern[8] = {0,1,2,3,4,5,6,7};
 
-    bool          has_random_info = false;
-    LR2RandomMode random_mode     = LR2RandomMode::Off;
+    bool          has_random_info[2] = {false, false}; // [0]=P1, [1]=P2
+    LR2RandomMode random_mode[2]     = {LR2RandomMode::Off, LR2RandomMode::Off};
     int           random_seed     = 0;
 
     std::vector<uint8_t> lr2_judgements;  // op210: 5=PGREAT..0=MISS
@@ -236,13 +254,52 @@ struct ReplayData {
 - `is_press`: Parser 保留全部 KeyDown/KeyUp 事件；JudgementEngine 和 ChartView 仅消费 press 事件
 - `lr2_judgements`: op210 判定序列原样存储，为 Phase 2.5.2 对拍验证预留
 - `display_to_bms`: 由 JudgementEngine 内部计算并暴露 getter，ChartView 通过此 getter 同步 `bms_lane_to_display_`
+- `has_random_info[2]` / `random_mode[2]`: 支持 P1/P2 双玩家独立模式 (Phase 2.5.1 扩展)
+
+### 判定窗口数据结构 (Phase 2.5.1 新增)
+
+```cpp
+enum class JudgeSystem { LR2, Beatoraja };
+enum class JudgeRank : uint8_t { VERY_HARD = 0, HARD, NORMAL, EASY };
+
+struct JudgeWindow {
+    int pg;
+    int gr;
+    int gd;
+    int bd;       // symmetric BAD (LR2) or max of fast/slow (BEATORAJA)
+    int poor;
+    int bd_fast;  // maximum early offset for BAD (ms), stored as positive
+    int bd_slow;  // maximum late offset for BAD (ms), stored as positive
+};
+```
 
 ### ChartView 配置
 
 ```cpp
+enum class ReplayDisplayMode { LineOnly, FullHold, Marker };
+
 struct Config {
     bool show_replay  = true;   // replay overlay toggle
     bool is_2p_layout = false;  // 1P (SC left) / 2P (SC right)
+};
+```
+
+### 共享渲染接口 (Phase 2.5.1 新增)
+
+```cpp
+struct Viewport {  // 抽象视口接口 (虚拟 y_at())
+    int width = 0, height = 0;
+    virtual int y_at(tick_t tick) const = 0;
+};
+
+struct PixelBuf {  // 抽象像素缓冲区接口 (虚拟 fill_rect())
+    virtual void fill_rect(int x, int y, int w, int h, uint32_t color) = 0;
+};
+
+class CoreRenderer {  // 纯静态绘制原语，被 PngRenderer / ChartView / VideoExporter 共用
+    static void draw_background(...);     // 小节背景 + 网格线 + lane 分隔线 + 判定线
+    static void draw_notes(...);          // Note 头 + LN 体 + LN 尾标记
+    static void draw_replay_hits(...);    // 空心按键时长框
 };
 ```
 
@@ -287,13 +344,14 @@ nlohmann::json::parse()       → JSON object
       ReplayData { hits[], shuffle_pattern[] }
 ```
 
-### IReplayParser 架构预留
+### IReplayParser 架构
 
 ```cpp
 class IReplayParser {
+    virtual ~IReplayParser() = default;
     virtual ReplayData parse(path, TimeMap&) = 0;
 };
-class BrdParser   : public IReplayParser { ... };
+class BrdParser    : public IReplayParser { ... };
 class Lr2RepParser : public IReplayParser { ... };  // ✓ Phase 2.5
 ```
 
@@ -348,7 +406,7 @@ ReplayData { format=LR2REP, hits[], random_mode, random_seed, lr2_judgements[] }
 | Replay 类型 | 映射来源 | 说明 |
 |------------|---------|------|
 | BRD (Normal) | identity | display == BMS |
-| BRD (Random) | `shuffle_pattern[8]` | 由 `build_display_to_bms()` 重建 |
+| BRD (Random) | `shuffle_pattern[8]` | 由 `compute_lane_mappings()` 重建 |
 | LR2REP (OFF) | identity | `random_mode == Off` |
 | LR2REP (MIRROR) | 硬编码 | 1↔7, 2↔6, 3↔5, 4→4 |
 | LR2REP (RANDOM) | `LR2Random(seed)` | Fisher-Yates → inverse permutation |
@@ -357,7 +415,7 @@ ReplayData { format=LR2REP, hits[], random_mode, random_seed, lr2_judgements[] }
 ### bms_lane_to_display_ 同步机制（Phase 2.5.1 关键修复）
 
 ```cpp
-// chart_view.cpp set_data() — after judge_engine_.analyze():
+// chart_view.cpp set_data() — after judge_engine_.compute_lane_mappings():
 const int* d2b = judge_engine_.display_to_bms();  // from JudgementEngine
 for (int dl = 0; dl < 8; ++dl) {
     int bl = d2b[dl];
@@ -460,6 +518,7 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | LN body + tail 标记 | ✓ |
 | Replay 空心按键时长框 | ✓ |
 | Random 乱序 Note 自动重排 | ✓ |
+| 共享 CoreRenderer 绘制原语 | ✓ Phase 2.5.1 |
 
 ### GUI 实时渲染 (Phase 2.1 → 2.4)
 
@@ -485,6 +544,7 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | 双模式启动 (GUI / CLI) | ✓ |
 | 拖拽加载谱面 + 回放文件 | ✓ |
 | File 菜单 + 最近文件列表 | ✓ |
+| 共享 CoreRenderer 绘制原语 | ✓ Phase 2.5.1 |
 | 音频播放 | ✗ |
 | 播放头 Seek / 拖拽 | ✗ |
 
@@ -498,7 +558,8 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | 9-byte 二进制帧解析 | ✓ |
 | PRESS-RELEASE 配对状态机 | ✓ |
 | EOF 未松开截断 | ✓ |
-| IReplayParser 抽象基类 | ✓ |
+| IReplayParser 抽象基类 (独立 ireplay_parser.h) | ✓ Phase 2.5.1 重构 |
+| replay 模块拆分 (replay.h → replay_data.h + ireplay_parser.h + brd_parser.h) | ✓ Phase 2.5.1 |
 | Normal BRD 验证 | ✓ 2,810 hits |
 | Random BRD 验证 | ✓ 3,404 hits, shuffle=YES |
 | LR2 .lr2rep 支持 | ✓ 12B 小端记录, op 分类, op210 存储 |
@@ -506,6 +567,7 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | LR2 MIRROR 模式 | ✓ |
 | LR2 RANDOM 模式 | ✓ LR2Random MT19937 |
 | LR2 Release 事件保留 | ✓ `is_press` 标记, 全文保存 |
+| P1/P2 双玩家支持 (has_random_info[2] / random_mode[2]) | ✓ Phase 2.5.1 |
 
 ### 判定分析 (Phase 2.3)
 
@@ -519,6 +581,7 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | Mean ± StdDev offset 统计 | ✓ |
 | 判定颜色编码 (绿/蓝/红/紫) | ✓ |
 | Judge System 实时切换 | ✓ |
+| 判定窗口模块独立 (src/judge/judge_profile.h/cpp) | ✓ Phase 2.5.1 重构 |
 
 ### 视频导出 (Phase 2.2)
 
@@ -529,13 +592,14 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | 绿幕背景选项 | ✓ |
 | 导出进度 UI | ✓ |
 | 离屏渲染 (脱离屏幕刷新率) | ✓ |
+| 共享 CoreRenderer 绘制原语 | ✓ Phase 2.5.1 |
 
 ### UI 美化 (Phase 2.4)
 
 | 特性 | 状态 |
 |------|------|
 | TabBar 页签模式 (Welcome / Analyzer / About) | ✓ |
-| Replay Display Mode (LineOnly / FullHold) | ✓ |
+| Replay Display Mode (Line / FullHold / Marker) | ✓ |
 | Note Thickness 滑块 (1.0-20.0) | ✓ |
 | Scroll Distance 滑块 (480-7680 ticks, 1/16~1 小节) | ✓ |
 | Auto Follow Playback 开关 | ✓ |
@@ -580,25 +644,37 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | Marker 显示模式 (实心圆) | ✓ |
 | Show Releases 开关 (蓝灰色菱形 Release 标记) | ✓ |
 
+### Phase 2.5.1 重构 (模块化整理)
+
+| 特性 | 状态 |
+|------|------|
+| replay.h 拆分为 replay_data.h + ireplay_parser.h + brd_parser.h | ✓ |
+| 新增 src/judge/judge_profile.h/cpp (判定窗口独立模块) | ✓ |
+| 新增 src/render/core_renderer.h (共享渲染核心，消除 PngRenderer/ChartView/VideoExporter 重复代码) | ✓ |
+| has_random_info → bool[2] / random_mode → LR2RandomMode[2] (P1/P2 双玩家) | ✓ |
+| JudgeSystem / JudgeRank 枚举移至 judge_profile.h | ✓ |
+| CoreRenderer 抽象接口 (Viewport + PixelBuf) 统一三种渲染后端 | ✓ |
+
 ---
 
 ## 9. 验证数据
 
 ### 谱面
 
-| 谱面 | 特点 |
-|------|------|
-| `air7god.bme` | 无 BPM change, 无 STOP, 无 LN, 无 Ch02 |
-| `L'ouvreur(SPpp).bml` | BPM(Ch03+Ch08), STOP, LNOBJ YY, Ch02 |
+| 谱面 | 路径 | 特点 |
+|------|------|------|
+| `air7god.bme` | testfiles/ | 无 BPM change, 无 STOP, 无 LN, 无 Ch02 |
+| `anata_g24.bme` | testfiles/ | 附加测试谱面 |
+| `L'ouvreur(SPpp).bml` | testfiles/ | BPM(Ch03+Ch08), STOP, LNOBJ YY, Ch02 |
 
 ### L'ouvreur 审计结果
 
 ```
 BPM Source Audit:
   127.5 | Ch08 | YES
-   85.0 | Ch03 | YES
-  170.0 | Ch03 | YES
-   85.0 | Ch03 | YES
+    85.0 | Ch03 | YES
+   170.0 | Ch03 | YES
+    85.0 | Ch03 | YES
   127.5 | Ch08 | YES
   170.0 | Ch03 | YES
 
@@ -614,18 +690,48 @@ STOP: 5 events, all 0.125 beats
 |------|------|-----------|---------|------|
 | `air7god.bme_Normal.brd` | 2,810 | 0 | NO | ✓ GZIP + 轨道对齐 |
 | `air7god.bme_Random.brd` | 3,404 | 0 | YES | ✓ GZIP + Note 乱序, 回放对齐 |
+| `bc1462814a...brd` | — | — | — | ✓ 额外 BRD 测试文件 |
+| `bc1462814a..._1.brd` | — | — | — | ✓ 额外 BRD 测试文件 |
+| `bc1462814a..._2.brd` | — | — | — | ✓ 额外 BRD 测试文件 |
 
 ### LR2 Replay 验证
 
 | 测试项 | 状态 |
 |--------|------|
+| `normal.lr2rep` — OFF 模式 | ✓ |
+| `random1.lr2rep` — RANDOM mode (seed=24332) | ✓ |
+| `random2.lr2rep` — RANDOM mode (2nd seed) | ✓ |
 | .lr2rep 文件 size%12==0 校验 | ✓ |
 | Record 小端解析 | ✓ |
 | time_ms → time_map.second_to_tick() 转换 | ✓ |
 | op 103 / 200 / 210 提取 | ✓ |
 | LR2Random seed=24332 映射金标准断言 | ✓ Debug 自动通过 |
 | Release 事件 is_press=false 保存 | ✓ |
-| time_sec 原始 ms 精度保留 | ✓
+| time_sec 原始 ms 精度保留 | ✓ |
+| `random1_3456712.png` — 预期输出对照 | ✓ |
+| `random2_5732146.png` — 预期输出对照 | ✓ |
+
+### 测试文件清单 (testfiles/)
+
+```
+testfiles/
+├── air7god.bme                    # 基础测试谱面
+├── air7god.bme_Normal.brd         # Normal BRD 回放
+├── air7god.bme_Random.brd         # Random BRD 回放
+├── anata_g24.bme                  # 附加测试谱面
+├── bc1462814a...brd               # BRD 测试 (×3 变体)
+├── bc1462814a..._1.brd
+├── bc1462814a..._2.brd
+├── bc1462814a..._2/               # 关联数据目录
+├── eeff3a9a...txt                 # 未知文本
+├── L'ouvreur(SPpp).bml            # 复杂谱面 (BPM/STOP/LNOBJ/Ch02)
+├── normal.lr2rep                  # LR2 OFF 模式回放
+├── normal.png                     # 预期渲染输出
+├── random1.lr2rep                 # LR2 RANDOM (seed=24332)
+├── random1_3456712.png            # 预期输出
+├── random2.lr2rep                 # LR2 RANDOM (2nd seed)
+└── random2_5732146.png            # 预期输出
+```
 
 ---
 
@@ -641,20 +747,20 @@ cmake --build build --config Debug
 
 # ── CLI 模式 ──
 # 谱面渲染
-.\build\Release\bmv.exe air7god.bme output.png
+.\build\Release\bmv.exe testfiles\air7god.bme output.png
 
 # 谱面 + BRD 回放叠加
-.\build\Release\bmv.exe air7god.bme output.png --replay air7god.bme_Normal.brd
-.\build\Release\bmv.exe air7god.bme output.png --replay air7god.bme_Random.brd
+.\build\Release\bmv.exe testfiles\air7god.bme output.png --replay testfiles\air7god.bme_Normal.brd
+.\build\Release\bmv.exe testfiles\air7god.bme output.png --replay testfiles\air7god.bme_Random.brd
 
 # L'ouvreur 全特性测试
-.\build\Release\bmv.exe "L'ouvreur(SPpp).bml" output.png
+.\build\Release\bmv.exe "testfiles\L'ouvreur(SPpp).bml" output.png
 
 # ── GUI 模式 ──
 # 无参启动
 .\build\Release\bmv.exe
 # 拖拽 .bms/.brd/.lr2rep 到窗口
-# File → Open Replay... 现在支持 .brd 和 .lr2rep
+# File → Open Replay... 支持 .brd 和 .lr2rep
 ```
 
 ### 镜像加速
@@ -699,12 +805,12 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 **理由**: 符合 LNOBJ 规范，0 orphan 验证通过。
 
 ### ADR-7: Replay 采用 IReplayParser 抽象基类
-**决策**: 定义 `IReplayParser` 虚基类，`BrdParser` 继承实现。
-**理由**: 未来支持 `.lr2rep` 时无需重构调用方。
+**决策**: 定义 `IReplayParser` 虚基类，`BrdParser` 和 `Lr2RepParser` 分别继承实现。
+**理由**: 支持多种回放格式无需重构调用方。Phase 2.5.1 进一步拆分为独立文件 (ireplay_parser.h / replay_data.h / brd_parser.h)。
 
 ### ADR-8: Random 渲染由 Renderer 侧控制
 **决策**: ReplayHit.lane 保持物理轨道; 渲染层根据 `shuffle_pattern` 构建 `bms_lane_to_display_` 表重排谱面 Note。
-**理由**: 玩家操作基于物理键位，谱面 Note 应跟随屏幕显示偏移。避免 BrdParser 产出扭曲数据。
+**理由**: 玩家操作基于物理键位，谱面 Note 应跟随屏幕显示偏移。避免 Parser 产出扭曲数据。
 
 ### ADR-9: GZIP 原生解压替代系统调用 (Phase 2A)
 **决策**: 放弃 PowerShell `GZipStream` + puff.h，采用 miniz 的 `tinfl_decompress_mem_to_mem` + 手动 FLG-aware GZIP 头解析。
@@ -791,6 +897,31 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 - 此前 BRD shuffle 和 LR2 shuffle 分别在不同位置计算映射，导致 LR2 Random/Mirror 模式下 Note 渲染位置（bms_lane_to_display_）与 Hit 判定映射（display_to_bms）不一致
 - 统一单一真源（Single Source of Truth）避免了两端偏差
 
+### ADR-23: replay.h 拆分为三个独立头文件 (Phase 2.5.1)
+**决策**: 将原来的单体 `replay.h` (64行) 拆分为 `replay_data.h` (38行, 数据定义) + `ireplay_parser.h` (12行, 抽象接口) + `brd_parser.h` (10行, BrdParser 声明)，`replay.h` 退化为聚合头文件 (4行) 包含三者。
+**理由**:
+- 解除循环依赖：`IReplayParser` 依赖 `ReplayData`，但不应依赖具体实现类
+- 使用者可按需引入：仅需数据结构时只 include `replay_data.h`
+- `brd_parser.h` 独立声明使得前向关联更清晰
+
+### ADR-24: CoreRenderer 共享渲染核心 (Phase 2.5.1)
+**决策**: 抽取 PngRenderer / ChartView / VideoExporter 中的共同渲染逻辑为 `CoreRenderer` 静态类，使用抽象 `Viewport` + `PixelBuf` 接口解耦具体渲染后端。
+**理由**:
+- 三种渲染目标 (内存像素/PngBuffer, GPU ImDrawList, 离屏RGB数组) 共享相同的小节背景/网格/lane分隔/Note/LN/replay框 绘制公式
+- 消除 ~200 行重复代码
+- Viewport 抽象使 y_at() 在 PngRenderer (tpk反算) 和 ChartView (scroll+zoom+culling) 下统一
+
+### ADR-25: has_random_info / random_mode 升级为双玩家数组 (Phase 2.5.1)
+**决策**: `ReplayData` 中 `has_random_info` 从 `bool` 升级为 `bool[2]`，`random_mode` 从 `LR2RandomMode` 升级为 `LR2RandomMode[2]`，索引 0=P1, 1=P2。
+**理由**: LR2 回放可同时携带 P1 和 P2 的 Random 模式信息，原单值设计无法表达双人模式。
+
+### ADR-26: JudgeProfile 模块独立 (Phase 2.5.1)
+**决策**: 将 `JudgeSystem`/`JudgeRank` 枚举和 `JudgeWindow`/`JudgeProfile` 类从 `judgement_engine.h` 中抽取为独立的 `src/judge/judge_profile.h/cpp` 模块。
+**理由**:
+- 判定窗口配置与判定分析引擎逻辑关注点不同
+- 独立模块可在不依赖 JudgementEngine 的情况下被引用
+- JudgementEngine 从 439 行膨胀中回收至更合理的 580 行
+
 ---
 
 ## 12. 第三方依赖
@@ -831,12 +962,22 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 - Press + Release 全事件保留 (is_press)
 - time_sec 原始毫秒精度 (op210 对拍基准)
 
-### Phase 2.5.1: LR2 Lane 映射 + UI 增强
-- display_to_bms 统一管理 + ChartView 映射同步修复
-- Marker 显示模式 / Show Releases 开关
-- Controls Replay Info (Format / Mode / Seed)
-- R-RANDOM 枚举预留
-- LR2Random seed=24332 硬校验 (Debug 构建自动通过)
+### Phase 2.5.1: 模块化重构 + UI 增强 + P1/P2 支持
+- __模块化重构__:
+  - `replay.h` 拆分为 `replay_data.h` + `ireplay_parser.h` + `brd_parser.h`
+  - 新增 `src/judge/judge_profile.h/cpp` (判定窗口独立模块)
+  - 新增 `src/render/core_renderer.h` (共享渲染核心，消除 PngRenderer/ChartView/VideoExporter 重复代码)
+  - `has_random_info` → `bool[2]` / `random_mode` → `LR2RandomMode[2]` (P1/P2 双玩家)
+- __Lane 映射修复__:
+  - `display_to_bms` 统一管理 + ChartView 映射同步修复
+- __UI 增强__:
+  - Marker 显示模式 / Show Releases 开关
+  - Controls Replay Info (Format / Mode / Seed)
+  - R-RANDOM 枚举预留
+- __测试增强__:
+  - LR2Random seed=24332 硬校验 (Debug 构建自动通过)
+  - `random1_3456712.png` / `random2_5732146.png` 预期输出对照
+  - 新增 testfiles: `anata_g24.bme`, `bc1462814a...brd` 系列, `normal.png` 预期输出
 
 ---
 
@@ -869,4 +1010,19 @@ https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
 
 ---
 
-*项目状态: Phase 2.5.1 完成 (LR2 Replay 解析 + Lane 映射 + Marker/Release UI + 映射一致性修复)*
+## 15. 参考文档索引
+
+| 文件 | 内容 |
+|------|------|
+| `ARCHIVE.md` | 本文件 — 项目开发归档（最全面） |
+| `PROJECT_INTRO.md` | 项目接手介绍文档 (快速上手用) |
+| `judge_LR2.md` | LR2 判定系统参考 |
+| `judge_raja.md` | Beatoraja 判定系统参考 |
+| `lr2.md` | LR2 内部机制笔记 |
+| `lr2rep_format.md` | .lr2rep 二进制格式文档（逆向分析） |
+| `raja.md` | Beatoraja 内部机制笔记 |
+| `CMakeLists.txt` | 构建配置 (FetchContent GLFW + ImGui) |
+
+---
+
+*项目状态: Phase 2.5.1 完成 (模块化重构 + LR2 Lane 映射 + P1/P2 双玩家 + CoreRenderer 共享 + Marker/Release UI + 映射一致性修复)*

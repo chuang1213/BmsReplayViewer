@@ -1,15 +1,11 @@
 #pragma once
 #include "core/timeline.h"
 #include "replay/replay.h"
+#include "judge/judge_profile.h"
 #include <vector>
 #include <cstdint>
 
 namespace bmv {
-
-enum class JudgeSystem {
-    LR2,
-    Beatoraja
-};
 
 enum class Judge {
     PGREAT,
@@ -24,7 +20,7 @@ struct HitResult {
     const ReplayHit* hit  = nullptr;
 
     Judge  judge = Judge::POOR;
-    int    offset_ms = 0;   // positive = SLOW, negative = FAST
+    double offset_ms = 0.0; // positive = SLOW, negative = FAST
     bool   fast = false;
     bool   slow = false;
     bool   is_release = false;
@@ -55,8 +51,7 @@ public:
     void compute_lane_mappings(const ReplayData& replay);
 
     void analyze(const Timeline& timeline,
-                 const ReplayData& replay,
-                 int rank);
+                 const ReplayData& replay);
 
     const std::vector<HitResult>& results() const { return results_; }
     const std::vector<const NoteEvent*>& missed_notes() const { return missed_notes_; }
@@ -74,9 +69,6 @@ private:
     AccuracyStatistics     stats_;
     int computed_display_to_bms_[8] = {0, 1, 2, 3, 4, 5, 6, 7};
     int computed_bms_to_display_[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-
-    Judge classify_lr2(int offset_ms, int rank) const;
-    Judge classify_beatoraja(int offset_ms, int rank) const;
 };
 
 } // namespace bmv

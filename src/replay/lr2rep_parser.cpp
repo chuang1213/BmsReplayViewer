@@ -71,12 +71,20 @@ ReplayData Lr2RepParser::parse(const std::string& filepath,
         } else {
             if (op == 103) {
                 raw_random_mode_p1 = value;
-                result.has_random_info[0] = true;
-                result.random_mode[0] = static_cast<LR2RandomMode>(value);
+                if (value >= 0 && value <= 4) {
+                    result.has_random_info[0] = true;
+                    result.random_mode[0] = static_cast<LR2RandomMode>(value);
+                } else {
+                    std::fprintf(stderr, "[Lr2RepParser] P1 invalid random_mode=%d, defaulting OFF\n", value);
+                }
             } else if (op == 153) {
                 raw_random_mode_p2 = value;
-                result.has_random_info[1] = true;
-                result.random_mode[1] = static_cast<LR2RandomMode>(value);
+                if (value >= 0 && value <= 4) {
+                    result.has_random_info[1] = true;
+                    result.random_mode[1] = static_cast<LR2RandomMode>(value);
+                } else {
+                    std::fprintf(stderr, "[Lr2RepParser] P2 invalid random_mode=%d, defaulting OFF\n", value);
+                }
             } else if (op == 200) {
                 result.random_seed = value;
             } else if (op == 210) {

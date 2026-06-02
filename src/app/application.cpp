@@ -6,6 +6,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "GLFW/glfw3.h"
+#include <filesystem>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include "GLFW/glfw3native.h"
 
@@ -108,8 +109,8 @@ void Application::load_replay_file(const std::string& path) {
             replay_data_ = brd.parse(path.c_str(), timeline_.time_map);
         }
     } else {
-        BrdParser brd;
-        replay_data_ = brd.parse(path.c_str(), timeline_.time_map);
+        std::fprintf(stderr, "[Application] unsupported replay extension: %s\n", path.c_str());
+        return;
     }
     add_recent_replay(path);
     replay_loaded_ = true;
@@ -125,10 +126,24 @@ void Application::reload_chart_view() {
     }
 }
 
-static const char* RECENT_PATH = "recent_files.json";
+static std::string get_recent_path() {
+    std::filesystem::path dir;
+#ifdef _WIN32
+    const char* appdata = std::getenv("APPDATA");
+    dir = appdata ? std::filesystem::path(appdata) / "BMV"
+                  : std::filesystem::current_path();
+#else
+    const char* home = std::getenv("HOME");
+    dir = home ? std::filesystem::path(home) / ".config" / "bmv"
+               : std::filesystem::current_path();
+#endif
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    return (dir / "recent_files.json").string();
+}
 
 void Application::load_recent_files() {
-    std::ifstream f(RECENT_PATH);
+    std::ifstream f(get_recent_path());
     if (!f.is_open()) return;
     try {
         auto j = nlohmann::json::parse(f);
@@ -166,7 +181,7 @@ void Application::save_recent_files() {
     cfg["auto_follow_playback"] = chart_view_.auto_follow_playback();
     j["config"] = cfg;
 
-    std::ofstream f(RECENT_PATH);
+    std::ofstream f(get_recent_path());
     if (f.is_open()) f << j.dump(2);
 }
 
@@ -433,8 +448,6 @@ int Application::run() {
     active_tab_ = 0;
     chart_loaded_ = false;
 
-    static ExportConfig ecfg;
-
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
 
@@ -454,21 +467,21 @@ int Application::run() {
         if (show_export_dialog_) {
             ImGui::SetNextWindowSize(ImVec2(360, 320), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Export Video", &show_export_dialog_)) {
-                ImGui::InputInt("Width",  &ecfg.width);
-                ImGui::InputInt("Height", &ecfg.height);
-                ImGui::InputInt("FPS",    &ecfg.fps);
-                ImGui::Checkbox("Green Screen", &ecfg.green_screen);
-                ImGui::InputText("Output", ecfg.output_path, sizeof(ecfg.output_path));
+                ImGui::InputInt("Width",  &export_cfg_.width);
+                ImGui::InputInt("Height", &export_cfg_.height);
+                ImGui::InputInt("FPS",    &export_cfg_.fps);
+                ImGui::Checkbox("Green Screen", &export_cfg_.green_screen);
+                ImGui::InputText("Output", export_cfg_.output_path, sizeof(export_cfg_.output_path));
                 ImGui::Separator();
                 ImGui::TextDisabled("Requires ffmpeg in system PATH.");
                 if (chart_loaded_) {
                     double ts = timeline_.time_map.tick_to_second(timeline_.tick_end());
-                    int tf = static_cast<int>(ts * ecfg.fps) + 1;
+                    int tf = static_cast<int>(ts * export_cfg_.fps) + 1;
                     ImGui::Text("Duration: %.1f s  |  Frames: %d", ts, tf);
                 }
                 if (ImGui::Button("Start Export", ImVec2(-1, 0))) {
                     video_exporter_.start_export(
-                        ecfg, timeline_,
+                        export_cfg_, timeline_,
                         replay_data_.hits.empty() ? nullptr : &replay_data_,
                         chart_view_.bms_lane_to_display(),
                         chart_view_.config.is_2p_layout,

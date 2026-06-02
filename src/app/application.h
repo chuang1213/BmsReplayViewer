@@ -21,6 +21,7 @@ private:
     ReplayData    replay_data_;
     ChartView     chart_view_;
     VideoExporter video_exporter_;
+    ExportConfig  export_cfg_;
     bool          chart_loaded_       = false;
     bool          replay_loaded_      = false;
     int           active_tab_         = 0;

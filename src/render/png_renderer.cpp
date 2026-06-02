@@ -3,6 +3,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include "core_renderer.h"
 #include "replay/lr2_random.h"
 #include <algorithm>
 #include <cstdio>
@@ -77,23 +78,6 @@ void PngRenderer::PixelBuffer::fill_rect(int x, int y, int w, int h, uint32_t co
     }
 }
 
-void PngRenderer::PixelBuffer::fill_rect_clipped(
-    int x, int y, int w, int h, uint32_t color,
-    int cx, int cy, int cw, int ch)
-{
-    if (w <= 0 || h <= 0) return;
-    int x0 = std::max(x, cx);
-    int y0 = std::max(y, cy);
-    int x1 = std::min(x + w, cx + cw);
-    int y1 = std::min(y + h, cy + ch);
-    for (int py = y0; py < y1; ++py) {
-        auto* row = &pixels[py * width];
-        for (int px = x0; px < x1; ++px) {
-            row[px] = color;
-        }
-    }
-}
-
 // --- Coordinates ---
 
 int PngRenderer::measure_top(int m) const {
@@ -134,130 +118,7 @@ int PngRenderer::chart_y0() const {
     return measure_top(num_measures_ - 1);
 }
 
-// --- Drawing ---
-
-void PngRenderer::draw_measure_backgrounds() {
-    for (int m = 0; m < num_measures_; ++m) {
-        int y = measure_top(m);
-        uint32_t bg = (m % 2 == 0) ? cfg_.color_measure_bg_a : cfg_.color_measure_bg_b;
-        buf_.fill_rect(chart_x0(), y, chart_w(), cfg_.pixels_per_measure, bg);
-    }
-}
-
-void PngRenderer::draw_grids() {
-    for (int m = 0; m < num_measures_; ++m) {
-        int meas_bottom = measure_bottom(m);
-
-        tick_t step_16 = TICKS_PER_MEASURE / 16;
-        for (int i = 0; i <= 16; ++i) {
-            int y = meas_bottom - static_cast<int>(i * step_16 * pixels_per_tick_);
-            buf_.fill_rect(chart_x0(), y, chart_w(), 1, cfg_.color_grid_16th);
-        }
-
-        tick_t step_8 = TICKS_PER_MEASURE / 8;
-        for (int i = 0; i <= 8; ++i) {
-            int y = meas_bottom - static_cast<int>(i * step_8 * pixels_per_tick_);
-            buf_.fill_rect(chart_x0(), y, chart_w(), 1, cfg_.color_grid_8th);
-        }
-
-        tick_t step_4 = TICKS_PER_MEASURE / 4;
-        for (int i = 0; i <= 4; ++i) {
-            int y = meas_bottom - static_cast<int>(i * step_4 * pixels_per_tick_);
-            buf_.fill_rect(chart_x0(), y, chart_w(), 1, cfg_.color_grid_4th);
-        }
-    }
-}
-
-void PngRenderer::draw_measure_separators() {
-    for (int m = 0; m <= num_measures_; ++m) {
-        int y = measure_bottom(m);
-        int thickness = 2;
-        buf_.fill_rect(chart_x0(), y, chart_w(), thickness, cfg_.color_measure_sep);
-    }
-}
-
-void PngRenderer::draw_lane_separators() {
-    for (int lane = 0; lane <= num_lanes_; ++lane) {
-        int x = chart_x(lane);
-        int thickness = (lane == 0 || lane == num_lanes_) ? 2 : 1;
-        buf_.fill_rect(x, chart_y0(), thickness, chart_h(), cfg_.color_lane_sep);
-    }
-}
-
-void PngRenderer::draw_notes(const Timeline& tl) {
-    for (auto& n : tl.notes) {
-        int render_lane = bms_lane_to_display_[n.lane];
-        if (render_lane >= static_cast<int>(num_lanes_)) continue;
-
-        int meas   = measure_of(n.tick);
-        tick_t t_in = tick_in_measure(n.tick);
-
-        if (meas < 0 || meas >= num_measures_) continue;
-
-        int x = chart_x(render_lane) + (cfg_.lane_width - cfg_.note_width) / 2;
-
-        int note_h = cfg_.note_min_height;
-        int y_center = chart_y_abs(meas, t_in);
-
-        if (cfg_.note_height_proportional && n.end_tick > n.tick) {
-            int m_end = measure_of(n.end_tick);
-            tick_t t_end = tick_in_measure(n.end_tick);
-            if (m_end == meas) {
-                int y_end = chart_y_abs(meas, t_end);
-                note_h = std::max(y_center - y_end, cfg_.note_min_height);
-            } else if (m_end > meas) {
-                note_h = std::max(y_center - measure_top(meas), cfg_.note_min_height);
-            }
-        }
-
-        uint32_t color;
-        switch (n.lane) {
-            case 0: color = cfg_.note_color_scratch; break;
-            case 1: case 3: case 5: case 7:
-                color = cfg_.note_color_white; break;
-            default:
-                color = cfg_.note_color_blue; break;
-        }
-
-        int y = y_center - note_h / 2;
-        int meas_top_y = measure_top(meas);
-        buf_.fill_rect_clipped(x, y, cfg_.note_width, note_h, color,
-                                chart_x0(), meas_top_y, chart_w(), cfg_.pixels_per_measure);
-
-        // LN body: draw a vertical bar from head tick to end_tick
-        if (n.end_tick > n.tick) {
-            int m_tail = measure_of(n.end_tick);
-            tick_t t_tail = tick_in_measure(n.end_tick);
-            int body_x = x + cfg_.note_width / 2 - 2;  // narrow bar in center of lane
-
-            for (int m = meas; m <= m_tail && m < num_measures_; ++m) {
-                int seg_y0, seg_y1;
-                if (m == meas) {
-                    seg_y0 = y_center;              // head center
-                    // If LN ends in same measure, stop at tail; otherwise fill to measure top
-                    seg_y1 = (meas == m_tail) ? chart_y_abs(m, t_tail) : measure_top(m);
-                } else if (m == m_tail) {
-                    seg_y0 = measure_bottom(m);      // bottom of tail measure
-                    seg_y1 = chart_y_abs(m, t_tail); // tail position
-                } else {
-                    seg_y0 = measure_bottom(m);
-                    seg_y1 = measure_top(m);
-                }
-                if (seg_y1 < seg_y0) {
-                    int meas_top_y2 = measure_top(m);
-                    buf_.fill_rect_clipped(body_x, seg_y1, 4, seg_y0 - seg_y1, color,
-                                            chart_x0(), meas_top_y2, chart_w(), cfg_.pixels_per_measure);
-                }
-            }
-
-            // LN tail marker (small rectangle at end)
-            int tail_y = chart_y_abs(m_tail, t_tail) - 2;
-            int tail_m_top = measure_top(m_tail);
-            buf_.fill_rect_clipped(x, tail_y, cfg_.note_width, 4, cfg_.color_label_text,
-                                    chart_x0(), tail_m_top, chart_w(), cfg_.pixels_per_measure);
-        }
-    }
-}
+// --- Drawing (shared via CoreRenderer) ---
 
 void PngRenderer::draw_bpm_lines(const Timeline& tl) {
     for (auto& b : tl.bpm_changes) {
@@ -300,58 +161,6 @@ void PngRenderer::draw_measure_numbers(const Timeline& tl) {
         std::snprintf(lbl, sizeof(lbl), "%d", m.measure_num);
         draw_text(label_x0(), y, lbl, cfg_.color_measure_num);
     }
-}
-
-void PngRenderer::draw_replay_hits(const ReplayData& replay) {
-    for (auto& hit : replay.hits) {
-        if (hit.lane >= static_cast<uint8_t>(num_lanes_)) continue;
-
-        tick_t t_start = hit.tick_start;
-        tick_t t_end   = (hit.tick_end > hit.tick_start) ? hit.tick_end
-                                                          : (hit.tick_start + 1);
-
-        int m_start = measure_of(t_start);
-        int m_end   = measure_of(t_end);
-        tick_t t_s  = tick_in_measure(t_start);
-        tick_t t_e  = tick_in_measure(t_end);
-
-        int y_start = chart_y_abs(m_start, t_s);  // bottom of box (larger Y)
-        int y_end   = chart_y_abs(m_end, t_e);    // top of box (smaller Y)
-
-        int box_x = chart_x(hit.lane) + (cfg_.lane_width - cfg_.replay_box_width) / 2;
-        int box_w = cfg_.replay_box_width;
-        uint32_t color = cfg_.replay_box_color;
-
-        // Draw hollow box segments per measure
-        for (int m = m_start; m <= m_end && m < num_measures_; ++m) {
-            int seg_y0, seg_y1;
-            if (m == m_start) {
-                seg_y0 = y_start;
-                seg_y1 = (m_start == m_end) ? y_end : measure_top(m);
-            } else if (m == m_end) {
-                seg_y0 = measure_bottom(m);
-                seg_y1 = y_end;
-            } else {
-                seg_y0 = measure_bottom(m);
-                seg_y1 = measure_top(m);
-            }
-
-            if (seg_y1 >= seg_y0) continue;
-            int box_h = seg_y0 - seg_y1;
-            if (box_h < cfg_.replay_box_min_h) box_h = cfg_.replay_box_min_h;
-
-            int yt = seg_y1;           // top of box segment
-            int yb = seg_y1 + box_h;   // bottom of box segment
-
-            // hollow rectangle: 4 lines
-            buf_.fill_rect(box_x, yt, box_w, 1, color);             // top
-            buf_.fill_rect(box_x, yb - 1, box_w, 1, color);         // bottom
-            buf_.fill_rect(box_x, yt, 1, box_h, color);             // left
-            buf_.fill_rect(box_x + box_w - 1, yt, 1, box_h, color); // right
-        }
-    }
-
-    std::fprintf(stdout, "[replay] %zu hits rendered\n", replay.hits.size());
 }
 
 // --- Main render ---
@@ -406,17 +215,77 @@ bool PngRenderer::render(const Timeline& timeline,
     buf_.init(img_w, img_h);
     buf_.fill(cfg_.color_bg);
 
-    draw_measure_backgrounds();
-    draw_grids();
-    draw_lane_separators();
-    draw_measure_separators();
-    draw_notes(timeline);
-    draw_bpm_lines(timeline);       // after notes
-    draw_stop_lines(timeline);      // after notes
-    if (replay) {
-        draw_replay_hits(*replay);  // replay overlay
+    // Core renderer via local adapters
+    {
+        struct PngViewport : public Viewport {
+            PngRenderer* pr;
+            int y_at(tick_t tick) const override {
+                return pr->chart_y_abs(pr->measure_of(tick), pr->tick_in_measure(tick));
+            }
+        };
+        struct PngBuf : public PixelBuf {
+            PixelBuffer* pb = nullptr;
+            void fill_rect(int x, int y, int w, int h, uint32_t c) override {
+                pb->fill_rect(x, y, w, h, c);
+            }
+        };
+
+        PngViewport vp;
+        vp.pr     = this;
+        vp.width  = img_w;
+        vp.height = img_h;
+
+        PngBuf pbuf;
+        pbuf.pb = &buf_;
+
+        GridColors gc;
+        gc.bg_full   = cfg_.color_bg;
+        gc.bg_a      = cfg_.color_measure_bg_a;
+        gc.bg_b      = cfg_.color_measure_bg_b;
+        gc.measure   = cfg_.color_measure_sep;
+        gc.fourth    = cfg_.color_grid_4th;
+        gc.eighth    = cfg_.color_grid_8th;
+        gc.sixteenth = cfg_.color_grid_16th;
+        gc.lane      = cfg_.color_lane_sep;
+        gc.judgment  = cfg_.color_label_text;
+
+        NoteColors nc;
+        nc.scratch = cfg_.note_color_scratch;
+        nc.white   = cfg_.note_color_white;
+        nc.blue    = cfg_.note_color_blue;
+        nc.ln_tail = cfg_.color_label_text;
+
+        tick_t min_tick = 0;
+        tick_t max_tick = timeline.tick_end();
+
+        CoreRenderer::draw_background(pbuf, vp,
+            min_tick, max_tick,
+            static_cast<float>(chart_x0()), chart_w(),
+            num_lanes_, static_cast<float>(cfg_.lane_width), gc);
+
+        CoreRenderer::draw_notes(pbuf, vp,
+            timeline.notes, bms_lane_to_display_,
+            min_tick, max_tick,
+            static_cast<float>(chart_x0()),
+            static_cast<float>(cfg_.lane_width),
+            static_cast<float>(cfg_.note_width),
+            static_cast<float>(cfg_.note_min_height),
+            pixels_per_tick_, nc, num_lanes_);
+
+        if (replay) {
+            CoreRenderer::draw_replay_hits(pbuf, vp,
+                replay->hits,
+                min_tick, max_tick,
+                static_cast<float>(chart_x0()),
+                static_cast<float>(cfg_.lane_width),
+                static_cast<float>(cfg_.replay_box_width),
+                pixels_per_tick_, num_lanes_, cfg_.replay_box_color);
+        }
     }
-    draw_measure_numbers(timeline); // on top
+
+    draw_bpm_lines(timeline);
+    draw_stop_lines(timeline);
+    draw_measure_numbers(timeline);
 
     int stride = img_w * 4;
     int result = stbi_write_png(output_path.c_str(), img_w, img_h, 4,
