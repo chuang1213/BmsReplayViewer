@@ -18,6 +18,9 @@ public:
                double initial_bpm);
 
     double tick_to_second(tick_t tick) const;
+    // Exact (fractional-tick) variant — no integer-tick truncation. Used for the
+    // beatoraja µs judge where sub-tick precision flips FAST/SLOW near 0 ms.
+    double tick_to_second(double tick) const;
     tick_t second_to_tick(double seconds) const;
 
     bool empty() const { return entries_.empty(); }

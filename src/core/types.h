@@ -13,6 +13,10 @@ struct NoteEvent {
     tick_t   end_tick;   // > tick = long note; == tick = normal note
     uint8_t  lane;
     uint16_t wav_index;
+    // Non-truncated note position (fractional ticks). `tick` is this floored by
+    // integer division; beatoraja judges on exact µs, so the µs path uses this to
+    // avoid sub-tick (~0.16 ms @190 BPM) error flipping FAST/SLOW near 0 ms.
+    double   tick_exact = 0.0;
 };
 
 enum class BpmSource : uint8_t {

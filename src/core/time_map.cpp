@@ -85,6 +85,23 @@ double TimeMap::tick_to_second(tick_t tick) const
     return entry.accumulated_seconds + delta_sec;
 }
 
+double TimeMap::tick_to_second(double tick) const
+{
+    if (entries_.empty()) return 0.0;
+    if (tick <= 0.0) return 0.0;
+
+    auto it = std::upper_bound(entries_.begin(), entries_.end(), tick,
+        [](double t, const TimeMapEntry& e) { return t < static_cast<double>(e.tick); });
+
+    if (it == entries_.begin()) return 0.0;
+    --it;
+
+    double delta_beat = (tick - static_cast<double>(it->tick)) / TPB;
+    double delta_sec  = delta_beat * 60.0 / it->bpm;
+
+    return it->accumulated_seconds + delta_sec;
+}
+
 tick_t TimeMap::second_to_tick(double seconds) const
 {
     if (entries_.empty()) return 0;

@@ -155,7 +155,10 @@ ReplayData BrdParser::parse(const std::string& filepath,
                 hit.tick_end    = tick;
                 hit.lane        = static_cast<uint8_t>(keys[ev.keycode].mapped_lane);
                 hit.raw_keycode = static_cast<uint8_t>(ev.keycode);
-                hit.time_sec    = static_cast<double>(ev.time_us) / 1'000'000.0;
+                // PRESS time (exact recorded µs). Was mistakenly the release time
+                // (ev.time_us here is the key-up event); the press is what gets
+                // judged, so store start_us. beatoraja judges on exact µs.
+                hit.time_sec    = static_cast<double>(keys[ev.keycode].start_us) / 1'000'000.0;
                 hit.is_press    = true;
                 result.hits.push_back(hit);
                 keys[ev.keycode].active = false;
