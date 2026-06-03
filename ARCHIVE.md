@@ -1,15 +1,10 @@
-# BMV (BMS Viewer) — 开发归档文档
+﻿# BMV (BMS Viewer) — 开发归档文档
 
 > 最后更新: 2026-06-03
 > 语言: C++17 | 构建: CMake 3.20+ | 平台: Windows (MSVC) / Linux (GCC/Clang)
-> 总代码量: ~4,660 行 (src) | 版本: v0.3.1 | 模块: core, format, render, replay, judge, analysis, app
-> 当前阶段: Phase 3.0.1
+> 总代码量: ~4,660 行 (src) | 版本: 内部阶段 0.3.1 | 模块: core, format, render, replay, judge, analysis, app
+> 当前阶段: 内部阶段 3.0.1
 
----
-## 0. 待办
-1.旧版本的brd格式没兼容（testfile里还没放）
-2.回放解析解耦重构（方案见 ADR-22）
-3.中文路径会炸（UTF-8）：Windows 下 std::ifstream 窄字符路径按 ANSI 解释，中文路径打不开 → 文件打开统一走 std::filesystem::u8path、PNG 输出加 STBIW_WINDOWS_UTF8、CLI argv 转 UTF-8
 ## 1. 项目定位
 
 BMV 是一个 **BMS 谱面分析工具**（非游戏本体、非编辑器）。
@@ -42,7 +37,7 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
 
 ## 2. 架构总览
 
-### 数据流（Phase 2.1）
+### 数据流（内部阶段 2.1）
 
 ```
   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
@@ -58,17 +53,17 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
          ▼                    │                    │
   ┌──────────────┐            │                    │
   │build_timeline│            │                    │
-  │  • MeasureInfo 表        │                    │
-  │  • Ch02 变长度小节       │                    │
-  │  • LNOBJ 状态机          │                    │
-  │  • BPM source 追踪       │                    │
+  │  • MeasureInfo 表         │                    │
+  │  • Ch02 变长度小节         │                    │
+  │  • LNOBJ 状态机           │                    │
+  │  • BPM source 追踪        │                    │
   └──────┬───────┘            │                    │
          │                    │                    │
          ▼                    │                    │
   ┌──────────────┐            │                    │
   │  Timeline    │            │                    │
   │  • notes[]   │            │                    │
-  │  • bpm_changes[]        │                     │
+  │  • bpm_changes[]          │                    │
   │  • stops[]   │            │                    │
   │  • measures[]│            │                    │
   │  • bgm[]     │            │                    │
@@ -170,11 +165,11 @@ src/
 > - `brd_parser.h` (10行) — BrdParser 声明
 > - `replay.h` (4行) — 聚合头文件，包含以上三个
 
-> **Phase 2.5.1 新增**:
+> **内部阶段 2.5.1 新增**:
 > - `src/judge/judge_profile.h/cpp` — 判定窗口独立模块，从 judgement_engine 中抽取
 > - `src/render/core_renderer.h` (180行) — 共享渲染核心，被 PngRenderer / ChartView / VideoExporter 复用
 >
-> **Phase 3.0.1 新增**:
+> **内部阶段 3.0.1 新增**:
 > - `src/app/panels/welcome_panel.h/cpp` — Welcome 页签从 application.cpp 解耦为独立面板
 > - `src/app/panels/about_panel.h/cpp` — About 页签从 application.cpp 解耦为独立面板
 > - `libs/picosha2/picosha2.h` — 自实现 SHA256 header-only 库
@@ -269,11 +264,11 @@ struct ReplayData {
 **关键职责**:
 - `time_sec`: BRD 为缓存值；LR2REP 为原始毫秒真值，是 op210 对拍判定的唯一时间基准
 - `is_press`: Parser 保留全部 KeyDown/KeyUp 事件；JudgementEngine 和 ChartView 仅消费 press 事件
-- `lr2_judgements`: op210 判定序列原样存储，为 Phase 2.5.2 对拍验证预留
+- `lr2_judgements`: op210 判定序列原样存储，为 内部阶段 2.5.2 对拍验证预留
 - `display_to_bms`: 由 JudgementEngine 内部计算并暴露 getter，ChartView 通过此 getter 同步 `bms_lane_to_display_`
-- `has_random_info[2]` / `random_mode[2]`: 支持 P1/P2 双玩家独立模式 (Phase 2.5.1 扩展)
+- `has_random_info[2]` / `random_mode[2]`: 支持 P1/P2 双玩家独立模式 (内部阶段 2.5.1 扩展)
 
-### 判定窗口数据结构 (Phase 2.5.1 新增)
+### 判定窗口数据结构 (内部阶段 2.5.1 新增)
 
 ```cpp
 enum class JudgeSystem { LR2, Beatoraja };
@@ -308,7 +303,7 @@ std::string hash_verify_status;        // 校验结果文字 ("OK" / "MISMATCH")
 float   note_speed_ = 1.0f;            // Note Speed 变速 (0.5x ~ 2.0x)
 ```
 
-### 共享渲染接口 (Phase 2.5.1 新增)
+### 共享渲染接口 (内部阶段 2.5.1 新增)
 
 ```cpp
 struct Viewport {  // 抽象视口接口 (虚拟 y_at())
@@ -329,7 +324,7 @@ class CoreRenderer {  // 纯静态绘制原语，被 PngRenderer / ChartView / V
 
 ---
 
-## 5. BRD 解析管线（Phase 1.5）
+## 5. BRD 解析管线（内部阶段 1.5）
 
 ```
 .brd file (GZIP)
@@ -376,10 +371,10 @@ class IReplayParser {
     virtual ReplayData parse(path, TimeMap&) = 0;
 };
 class BrdParser    : public IReplayParser { ... };
-class Lr2RepParser : public IReplayParser { ... };  // ✓ Phase 2.5
+class Lr2RepParser : public IReplayParser { ... };  // ✓ 内部阶段 2.5
 ```
 
-### LR2 解析管线（Phase 2.5）
+### LR2 解析管线（内部阶段 2.5）
 
 ```
 .lr2rep file (raw binary, NO compression)
@@ -400,7 +395,7 @@ class Lr2RepParser : public IReplayParser { ... };  // ✓ Phase 2.5
   ├── op 103 / 153 → random_mode (LR2RandomMode)
   ├── op 200       → random_seed
   ├── op 202       → is_autoplay (logged, not used)
-  ├── op 210       → lr2_judgements.push_back(value)  (Phase 2.5.2 verification)
+  ├── op 210       → lr2_judgements.push_back(value)  (内部阶段 2.5.2 verification)
   └── other        → ignored
   │
   ▼
@@ -409,7 +404,7 @@ ReplayData { format=LR2REP, hits[], random_mode, random_seed, lr2_judgements[] }
 
 ---
 
-## 6. Lane 映射系统（Phase 2.5.1 统一）
+## 6. Lane 映射系统（内部阶段 2.5.1 统一）
 
 ### 两级映射架构
 
@@ -436,7 +431,7 @@ ReplayData { format=LR2REP, hits[], random_mode, random_seed, lr2_judgements[] }
 | LR2REP (RANDOM) | `LR2Random(seed)` | Fisher-Yates → inverse permutation |
 | LR2REP (S-RANDOM/R-RANDOM) | 预留 | identity fallback |
 
-### bms_lane_to_display_ 同步机制（Phase 2.5.1 关键修复）
+### bms_lane_to_display_ 同步机制（内部阶段 2.5.1 关键修复）
 
 ```cpp
 // chart_view.cpp set_data() — after judge_engine_.compute_lane_mappings():
@@ -451,7 +446,7 @@ for (int dl = 0; dl < 8; ++dl) {
 
 ---
 
-## 7. 1P/2P 布局映射（Phase 2.1）
+## 7. 1P/2P 布局映射（内部阶段 2.1）
 
 ### 核心逻辑
 
@@ -547,9 +542,9 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | LN body + tail 标记 | ✓ |
 | Replay 空心按键时长框 | ✓ |
 | Random 乱序 Note 自动重排 | ✓ |
-| 共享 CoreRenderer 绘制原语 | ✓ Phase 2.5.1 |
+| 共享 CoreRenderer 绘制原语 | ✓ 内部阶段 2.5.1 |
 
-### GUI 实时渲染 (Phase 2.1 → 2.4)
+### GUI 实时渲染 (内部阶段 2.1 → 2.4)
 
 | 特性 | 状态 |
 |------|------|
@@ -567,18 +562,18 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | Show Releases 开关 (蓝灰色菱形的 LR2 Release 标记) | ✓ |
 | 1P/2P 布局实时切换 | ✓ |
 | 浮动控制面板 (Controls Window) | ✓ |
-| Controls 固定内嵌 Analyzer 右侧 | ✓ Phase 3.0.1 |
-| Note Speed 变速滑条 (0.5x ~ 2.0x) | ✓ Phase 3.0.1 |
+| Controls 固定内嵌 Analyzer 右侧 | ✓ 内部阶段 3.0.1 |
+| Note Speed 变速滑条 (0.5x ~ 2.0x) | ✓ 内部阶段 3.0.1 |
 | Note Thickness 统一调节 (1-20px) | ✓ |
 | Auto Follow Playback 开关 | ✓ |
 | Config 持久化 (recent_files.json) | ✓ |
 | 双模式启动 (GUI / CLI) | ✓ |
 | 拖拽加载谱面 + 回放文件 | ✓ |
 | File 菜单 + 最近文件列表 | ✓ |
-| Hash 校验 (SHA256/MD5 文件名匹配) | ✓ Phase 3.0.1 |
-| Developer 设置区域 (Hash Verify, Debug Overlay, Judge Config) | ✓ Phase 3.0.1 |
-| Welcome/About 面板独立解耦 | ✓ Phase 3.0.1 |
-| 共享 CoreRenderer 绘制原语 | ✓ Phase 2.5.1 |
+| Hash 校验 (SHA256/MD5 文件名匹配) | ✓ 内部阶段 3.0.1 |
+| Developer 设置区域 (Hash Verify, Debug Overlay, Judge Config) | ✓ 内部阶段 3.0.1 |
+| Welcome/About 面板独立解耦 | ✓ 内部阶段 3.0.1 |
+| 共享 CoreRenderer 绘制原语 | ✓ 内部阶段 2.5.1 |
 | 音频播放 | ✗ |
 | 播放头 Seek / 拖拽 | ✗ |
 
@@ -592,8 +587,8 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | 9-byte 二进制帧解析 | ✓ |
 | PRESS-RELEASE 配对状态机 | ✓ |
 | EOF 未松开截断 | ✓ |
-| IReplayParser 抽象基类 (独立 ireplay_parser.h) | ✓ Phase 2.5.1 重构 |
-| replay 模块拆分 (replay.h → replay_data.h + ireplay_parser.h + brd_parser.h) | ✓ Phase 2.5.1 |
+| IReplayParser 抽象基类 (独立 ireplay_parser.h) | ✓ 内部阶段 2.5.1 重构 |
+| replay 模块拆分 (replay.h → replay_data.h + ireplay_parser.h + brd_parser.h) | ✓ 内部阶段 2.5.1 |
 | Normal BRD 验证 | ✓ 2,810 hits |
 | Random BRD 验证 | ✓ 3,404 hits, shuffle=YES |
 | LR2 .lr2rep 支持 | ✓ 12B 小端记录, op 分类, op210 存储 |
@@ -601,9 +596,9 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | LR2 MIRROR 模式 | ✓ |
 | LR2 RANDOM 模式 | ✓ LR2Random MT19937 |
 | LR2 Release 事件保留 | ✓ `is_press` 标记, 全文保存 |
-| P1/P2 双玩家支持 (has_random_info[2] / random_mode[2]) | ✓ Phase 2.5.1 |
+| P1/P2 双玩家支持 (has_random_info[2] / random_mode[2]) | ✓ 内部阶段 2.5.1 |
 
-### 判定分析 (Phase 2.3)
+### 判定分析 (内部阶段 2.3)
 
 | 特性 | 状态 |
 |------|------|
@@ -615,9 +610,9 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | Mean ± StdDev offset 统计 | ✓ |
 | 判定颜色编码 (绿/蓝/红/紫) | ✓ |
 | Judge System 实时切换 | ✓ |
-| 判定窗口模块独立 (src/judge/judge_profile.h/cpp) | ✓ Phase 2.5.1 重构 |
+| 判定窗口模块独立 (src/judge/judge_profile.h/cpp) | ✓ 内部阶段 2.5.1 重构 |
 
-### 视频导出 (Phase 2.2)
+### 视频导出 (内部阶段 2.2)
 
 | 特性 | 状态 |
 |------|------|
@@ -626,9 +621,9 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | 绿幕背景选项 | ✓ |
 | 导出进度 UI | ✓ |
 | 离屏渲染 (脱离屏幕刷新率) | ✓ |
-| 共享 CoreRenderer 绘制原语 | ✓ Phase 2.5.1 |
+| 共享 CoreRenderer 绘制原语 | ✓ 内部阶段 2.5.1 |
 
-### UI 美化 (Phase 2.4)
+### UI 美化 (内部阶段 2.4)
 
 | 特性 | 状态 |
 |------|------|
@@ -643,7 +638,7 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | Controls 浮动窗口 | ✓ |
 | Scroll Distance 范围修复 | ✓ |
 
-### LR2 Replay 支持 (Phase 2.5)
+### LR2 Replay 支持 (内部阶段 2.5)
 
 | 特性 | 状态 |
 |------|------|
@@ -660,7 +655,7 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | 文件拖拽 + 过滤器支持 .lr2rep | ✓ |
 | BRD 零侵入兼容 | ✓ |
 
-### LR2 Lane 映射 (Phase 2.5.1)
+### LR2 Lane 映射 (内部阶段 2.5.1)
 
 | 特性 | 状态 |
 |------|------|
@@ -678,7 +673,7 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | Marker 显示模式 (实心圆) | ✓ |
 | Show Releases 开关 (蓝灰色菱形 Release 标记) | ✓ |
 
-### Phase 2.5.1 重构 (模块化整理)
+### 内部阶段 2.5.1 重构 (模块化整理)
 
 | 特性 | 状态 |
 |------|------|
@@ -771,48 +766,6 @@ testfiles/
 ```
 
 ---
-
-## 10. 构建与测试
-
-```powershell
-# 构建 (首次会自动下载 GLFW + ImGui, 约 30s)
-cmake -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
-
-# ── Debug 构建（自动运行 LR2Random seed=24332 硬校验）──
-cmake --build build --config Debug
-
-# ── CLI 模式 ──
-# 谱面渲染
-.\build\Release\bmv.exe testfiles\air7god.bme output.png
-
-# 谱面 + BRD 回放叠加
-.\build\Release\bmv.exe testfiles\air7god.bme output.png --replay testfiles\air7god.bme_Normal.brd
-.\build\Release\bmv.exe testfiles\air7god.bme output.png --replay testfiles\air7god.bme_Random.brd
-
-# L'ouvreur 全特性测试
-.\build\Release\bmv.exe "testfiles\L'ouvreur(SPpp).bml" output.png
-
-# ── GUI 模式 ──
-# 无参启动
-.\build\Release\bmv.exe
-# 拖拽 .bms/.brd/.lr2rep 到窗口 (自动计算 hash + 校验文件名)
-# File → Open Replay... 支持 .brd 和 .lr2rep
-# 验证: 拖入 [sha256].brd 或 [md5].lr2rep 文件名即自动校验
-```
-
-### 镜像加速
-
-如果 GitHub 不可达，修改 `CMakeLists.txt` 中两个 FetchContent 的 URL：
-
-```cmake
-# 原 URL → 镜像 URL
-https://github.com/glfw/glfw/archive/refs/tags/3.4.zip
-→ https://kkgithub.com/glfw/glfw/archive/refs/tags/3.4.zip
-
-https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
-→ https://kkgithub.com/ocornut/imgui/archive/refs/heads/docking.zip
-```
 
 ---
 
@@ -1096,35 +1049,6 @@ File → 工厂1(格式分派) ┬─→ LR2 parser ─────────�
 
 ---
 
-## 14. 未来阶段
-
-### Phase 2.5.2: LR2 Replay Verification — ✅ 已完成 (2026-06-02)
-- op210 对拍验证（重算判定序列 vs LR2 内置判定）→ PGREAT/GREAT/GOOD/BAD/漏判/空POOR/总数 7 项全等
-- 详见 `debug_2026_06_02.md`
-
-### 近期 (v0.4)
-- beatoraja 判定系统重构（含 #RANK 4）—— 当前窗口 rank 缩放已修正，但仍需独立非对称判定路径
-- BMS 注释语法支持 (//, ;, /* */)
-- 负 BPM 处理 (逆向滚动)
-- 元数据显示：#SUBTITLE, #SUBARTIST, #COMMENT, #DIFFICULTY
-- 字体重绘 (添加字母支持)
-- 传参 + 目录内 hash 筛选 (简化拖谱流程)
-
-### 中期 (v0.5)
-- #BASE 62 进制支持
-- .bmson 解析支持 (BmsonParser)
-- 5K BMS 布局适配
-- 回放解析解耦重构（方案见 ADR-22）
-- 谱面波形图
-
-### 远期 (v1.0)
-- #LNTYPE 1 通道支持 (0x51-0x69)
-- #SCROLLxx / #SPEEDxx 渲染支持
-- 地雷通道 (D1-D9, E1-E9) 可视化
-- DP/Couple Play (#PLAYER 2/3) 支持
-
----
-
 ## 15. 参考文档索引
 
 | 文件 | 内容 |
@@ -1139,4 +1063,5 @@ File → 工厂1(格式分派) ┬─→ LR2 parser ─────────�
 
 ---
 
-*项目状态: Phase 3.0.1 完成 (GUI 布局重构 + Note Speed 变速 + Hash 校验 + Welcome/About 解耦 + Developer 面板)*
+*项目状态: 内部阶段 3.0.1 完成 (GUI 布局重构 + Note Speed 变速 + Hash 校验 + Welcome/About 解耦 + Developer 面板)*
+

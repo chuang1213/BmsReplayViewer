@@ -382,6 +382,21 @@ void ChartView::render_controls_inline() {
         ImGui::Text("Time: %.2f / %.1f s", current_time_sec_, total_sec);
     }
 
+    if (timeline_ && replay_ && !replay_->hits.empty()) {
+        ImGui::Spacing();
+        ImGui::SeparatorText("Accuracy");
+        const auto& s = judge_engine_.statistics();
+        ImGui::Text("PGREAT: %d", s.pgreat);
+        ImGui::Text("GREAT:  %d", s.great);
+        ImGui::Text("GOOD:   %d", s.good);
+        ImGui::Text("BAD:    %d", s.bad);
+        ImGui::Text("POOR:   %d", s.poor);
+        ImGui::Separator();
+        ImGui::Text("FAST: %d  |  SLOW: %d", s.fast, s.slow);
+        ImGui::Text("Offset: %.1f +/- %.1f ms",
+                    s.mean_offset, s.stddev_offset);
+    }
+
     ImGui::SeparatorText("View");
     ImGui::Checkbox("Show Replay", &config.show_replay);
 
@@ -429,42 +444,6 @@ void ChartView::render_controls_inline() {
             judge_engine_.analyze(*timeline_, *replay_);
     }
 
-    if (timeline_ && replay_ && !replay_->hits.empty()) {
-        ImGui::SeparatorText("Accuracy");
-        const auto& s = judge_engine_.statistics();
-        ImGui::Text("PGREAT: %d", s.pgreat);
-        ImGui::Text("GREAT:  %d", s.great);
-        ImGui::Text("GOOD:   %d", s.good);
-        ImGui::Text("BAD:    %d", s.bad);
-        ImGui::Text("POOR:   %d", s.poor);
-        ImGui::Separator();
-        ImGui::Text("FAST: %d  |  SLOW: %d", s.fast, s.slow);
-        ImGui::Text("Offset: %.1f +/- %.1f ms",
-                    s.mean_offset, s.stddev_offset);
-    }
-
-    if (timeline_ && replay_ && !replay_->hits.empty()) {
-        ImGui::SeparatorText("Replay");
-        const char* fmt_str = (replay_->format == ReplayFormat::LR2REP) ? "LR2REP" : "BRD";
-        ImGui::Text("Format: %s", fmt_str);
-        if (replay_->has_random_info[player_idx_]) {
-            const char* mode_str = "OFF";
-            if (replay_->random_mode[player_idx_] == LR2RandomMode::Mirror)  mode_str = "MIRROR";
-            if (replay_->random_mode[player_idx_] == LR2RandomMode::Random)  mode_str = "RANDOM";
-            if (replay_->random_mode[player_idx_] == LR2RandomMode::SRandom) mode_str = "S-RANDOM";
-            if (replay_->random_mode[player_idx_] == LR2RandomMode::RRandom) mode_str = "R-RANDOM";
-            ImGui::Text("Mode: %s", mode_str);
-            ImGui::Text("Seed: %d", replay_->random_seed);
-        }
-        int prev = player_idx_;
-        ImGui::RadioButton("P1", &player_idx_, 0); ImGui::SameLine();
-        ImGui::RadioButton("P2", &player_idx_, 1);
-        if (player_idx_ != prev && timeline_ && !replay_->hits.empty()) {
-            // Re-apply mapping & judgement when player is toggled
-            set_data(timeline_, replay_);
-        }
-    }
-
     ImGui::Separator();
     ImGui::TextDisabled("Scroll: Wheel  |  Zoom: Ctrl+Wheel");
     if (timeline_) {
@@ -478,6 +457,28 @@ void ChartView::render_controls_inline() {
     if (show_dev_options) {
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f),
                            "WARNING: These options are for advanced users only.");
+
+        if (timeline_ && replay_ && !replay_->hits.empty()) {
+            ImGui::Spacing();
+            ImGui::SeparatorText("Replay");
+            const char* fmt_str = (replay_->format == ReplayFormat::LR2REP) ? "LR2REP" : "BRD";
+            ImGui::Text("Format: %s", fmt_str);
+            if (replay_->has_random_info[player_idx_]) {
+                const char* mode_str = "OFF";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::Mirror)  mode_str = "MIRROR";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::Random)  mode_str = "RANDOM";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::SRandom) mode_str = "S-RANDOM";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::RRandom) mode_str = "R-RANDOM";
+                ImGui::Text("Mode: %s", mode_str);
+                ImGui::Text("Seed: %d", replay_->random_seed);
+            }
+            int prev = player_idx_;
+            ImGui::RadioButton("P1", &player_idx_, 0); ImGui::SameLine();
+            ImGui::RadioButton("P2", &player_idx_, 1);
+            if (player_idx_ != prev && timeline_ && !replay_->hits.empty()) {
+                set_data(timeline_, replay_);
+            }
+        }
 
         ImGui::Checkbox("##HashVerify", &hash_verify_enabled);
         ImGui::SameLine();

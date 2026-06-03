@@ -2,7 +2,7 @@
 
 > 生成日期: 2026-06-03
 > 语言: C++17 | 构建: CMake 3.20+ | 平台: Windows (MSVC) / Linux (GCC/Clang)
-> 总代码量: ~4,660 行 (src) | 版本: v0.3.1 | 当前阶段: Phase 3.0.1
+> 总代码量: ~4,660 行 (src) | 版本: 内部阶段 0.3.1 | 当前阶段: 内部阶段 3.0.1
 
 ---
 
@@ -250,46 +250,6 @@ BmsReplayViewer/
 
 ---
 
-## 8. 构建与运行
-
-### 构建
-
-```powershell
-# 配置 (首次自动下载 GLFW + ImGui, 约 30s)
-cmake -B build -G "Visual Studio 17 2022" -A x64
-
-# Release 构建
-cmake --build build --config Release
-
-# Debug 构建（自动运行 LR2Random seed=24332 黄金测试）
-cmake --build build --config Debug
-```
-
-### 运行
-
-```powershell
-# GUI 模式（无参数）
-.\build\Release\bmv.exe
-
-# CLI: 谱面 → PNG
-.\build\Release\bmv.exe testfiles\air7god.bme output.png
-
-# CLI: 谱面 + 回放叠加 → PNG
-.\build\Release\bmv.exe testfiles\air7god.bme output.png --replay testfiles\air7god.bme_Normal.brd
-
-# CLI: 复杂谱面（含 BPM 变化、STOP、LNOBJ）
-.\build\Release\bmv.exe "testfiles\L'ouvreur(SPpp).bml" output.png
-
-# CLI: LR2 回放判断（自动输出 op210 对照表）
-.\build\Release\bmv.exe testfiles\anata_g24.bme out.png --replay testfiles\eeff3a9a...lr2rep
-```
-
-### 中国大陆镜像
-
-如果 GitHub 不可达，编辑 `CMakeLists.txt` 将 URL 中的 `github.com` 替换为 `kkgithub.com`。
-
----
-
 ## 9. 关键设计决策
 
 | 决策 | 原因 |
@@ -313,39 +273,6 @@ cmake --build build --config Debug
 
 ---
 
-## 10. 当前状态与规划
-
-### 已完成
-- Phase 1: 基础架构（解析、Timeline、TimeMap、PNG 渲染）
-- Phase 2.1–2.4: GUI 框架、视频导出、判定引擎、UI 美化
-- Phase 2.5: LR2 Replay 支持（解析、RNG、OFF/MIRROR/RANDOM 映射）
-- Phase 2.5.1: 模块化重构 + P1/P2 双玩家 + 共享渲染核心
-- Phase 2.5.2: LR2 判定与 op210 真值对齐（7 项全等）
-- Phase 3.0.1: Controls 固定内嵌 + Note Speed + Hash 校验 + Welcome/About 解耦 + Developer 面板
-
-### 近期 (v0.4)
-- beatoraja 判定系统重构（含 #RANK 4）
-- BMS 注释语法支持 (//, ;, /* */)
-- 负 BPM 处理 (逆向滚动)
-- 元数据显示：#SUBTITLE, #SUBARTIST, #COMMENT, #DIFFICULTY
-- 字体重绘 (添加字母支持)
-- 传参 + 目录内 hash 筛选
-
-### 中期 (v0.5)
-- #BASE 62 进制支持
-- .bmson 解析支持 (BmsonParser)
-- 5K BMS 布局适配
-- 回放解析解耦重构（ADR-22）
-- 谱面波形图
-
-### 远期 (v1.0)
-- #LNTYPE 1 通道支持 (0x51-0x69)
-- #SCROLLxx / #SPEEDxx 渲染支持
-- 地雷通道可视化
-- DP/Couple Play 支持
-
----
-
 ## 11. 快速上手建议
 
 1. **先通读 `readme.md`** — 了解项目定位、功能、缺陷
@@ -365,5 +292,4 @@ cmake --build build --config Debug
 | `readme.md` | 首页（简介 / 缺陷 / Todo） |
 | `ARCHIVE.md` | 开发归档（最全面：ADR 30 项 + 数据结构 + 验证数据 + 构建说明） |
 | `PROJECT_INTRO_NEW.md` | 本文档 — 项目接手介绍 |
-| `debug_2026_06_02.md` | Debug 记录 (LR2 op210 对齐 + beatoraja 窗口修正) |
 | `CMakeLists.txt` | 构建配置 (FetchContent GLFW + ImGui) |
