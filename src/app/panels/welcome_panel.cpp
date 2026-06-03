@@ -13,15 +13,15 @@ WelcomeAction render_welcome_panel() {
     ImGui::BulletText("Supported formats:");
     ImGui::Indent();
     ImGui::BulletText("Charts:  .bms  .bme  .bml  (.bmson not tested)");
-    ImGui::BulletText("Replays: .brd(judge count is buggy)  .lr2rep");
+    ImGui::BulletText("Replays: .brd  .lr2rep");
     ImGui::Unindent();
     ImGui::Spacing();
 
     ImGui::Text("Quick Start:");
     ImGui::Indent();
-    ImGui::BulletText("Drag & drop a chart file onto the window");
-    ImGui::BulletText("Drag & drop a .brd/lr2rep file to load replay data");
-    ImGui::BulletText("Or use File > Open Chart... or Open Replay...");
+    ImGui::BulletText("1.Drag & drop a chart file onto the window first");
+    ImGui::BulletText("2.Drag & drop a .brd/lr2rep file to load replay data");
+    ImGui::BulletText("Or use File > Open Chart... & Open Replay...");
     ImGui::Unindent();
     ImGui::Spacing();
 
@@ -30,7 +30,7 @@ WelcomeAction render_welcome_panel() {
     ImGui::BulletText("Chart Analysis");
     ImGui::BulletText("Replay Overlay");
     ImGui::BulletText("Video Export");
-    ImGui::BulletText("This is an early prototype, please create an issue or email me for bug reports/feature requests");
+    ImGui::BulletText("please create an issue or email me for bug reports/feature requests");
     ImGui::Unindent();
     ImGui::Spacing();
 
