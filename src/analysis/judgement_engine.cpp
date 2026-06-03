@@ -92,7 +92,9 @@ void JudgementEngine::analyze(const Timeline& timeline,
     compute_lane_mappings(replay);
 
     int rank_raw = timeline.rank;
-    if (rank_raw < 0) rank_raw = 0; if (rank_raw > 3) rank_raw = 3;
+    if (rank_raw < 0) rank_raw = 0;
+    const int rank_max = (system_ == JudgeSystem::Beatoraja) ? 4 : 3;  // beatoraja adds VERY EASY
+    if (rank_raw > rank_max) rank_raw = rank_max;
     JudgeRank judge_rank = static_cast<JudgeRank>(rank_raw);
     const JudgeWindow& win = JudgeProfile::get_window(system_, judge_rank);
 
@@ -136,6 +138,141 @@ void JudgementEngine::analyze(const Timeline& timeline,
     int unmatched_hits = 0;
     int missed_notes_count = 0;
 
+    // → beatoraja SEVENKEYS judging — faithful to vanilla beatoraja JudgeManager.java.
+    //   dmtime = note_us − press_us (>0 = early/FAST). Each press picks the CLOSEST unmatched
+    //   note in [BD-late, MS-early] (beatoraja's JudgeAlgorithm), then the first tier [lo,hi]
+    //   containing dmtime decides the grade:
+    //     • PG/GR/GD/BD → score the note, consume it (combo continues)
+    //     • MS tier     → 空POOR: counts as POOR, does NOT consume the note and does NOT break
+    //                      combo. The note can still be scored by a later press, so one note may
+    //                      appear as BOTH a POOR and a hit — which is why the judge total can
+    //                      exceed the note count (verified: anata = 2252 notes, 2260 judges,
+    //                      Δ = 8 空POOR). Scratch uses its own wider windows.
+    //   A note no press ever scores → POOR (miss). #RANK 4 (VERY EASY) supported.
+    //   (LN/mine + exact JudgeAlgorithm tie-break still simplified.)
+    if (system_ == JudgeSystem::Beatoraja) {
+        // Faithful port of beatoraja JudgeManager.update() for SEVENKEYS notes.
+        //   • Each note has a state: 0 = unjudged (hittable). A HIT (PG/GR/GD/BD) or an
+        //     auto-MISS consumes it (judgeVanish {T,T,T,T,T,F} → setState). 空POOR (MS,
+        //     judge 5) does NOT consume (judgeVanish[5]=false): the note stays hittable,
+        //     and an already-consumed note can still take a 空POOR (the state≠0 branch).
+        //   • dmtime = note_us − press_us (>0 ⇒ pressed early/FAST). fast/slow = (dmtime≥0)
+        //     exactly as score.addJudgeCount(judge, mfast>=0) (JudgeManager:673).
+        //   • Auto-miss is TIME-driven (JudgeManager:612-618): once the play clock passes
+        //     note+|BD_late| with the note unhit it becomes judge 4 POOR, recorded LATE
+        //     (mfast = note − mtime < 0). |BD_late| = −W[3].lo (280 ms note / 290 ms scr).
+        //   • Per-press selection = JudgeManager:399-434 with JudgeAlgorithm.Combo gate.
+        for (auto& kv : lane_notes) {
+            int bms_lane = kv.first;
+            const auto& notes = kv.second;
+            const auto& hits  = lane_hits.count(bms_lane) ? lane_hits[bms_lane]
+                                                          : std::vector<size_t>{};
+            BeatorajaWindow W[5];
+            JudgeProfile::beatoraja_windows(rank_raw, /*scratch=*/bms_lane == 0, W);
+            // mjudgestart/mjudgeend: the selection considers dmtime ∈ [find_lo, find_hi).
+            long long find_lo = W[0].lo_us, find_hi = W[0].hi_us;
+            for (int j = 0; j < 5; ++j) {
+                if (W[j].lo_us < find_lo) find_lo = W[j].lo_us;  // BD late (most negative)
+                if (W[j].hi_us > find_hi) find_hi = W[j].hi_us;  // MS early (most positive)
+            }
+            const long long gd_lo = W[2].lo_us, gd_hi = W[2].hi_us;  // GOOD window (Combo gate)
+            const long long ms_lo = W[4].lo_us, ms_hi = W[4].hi_us;  // MS window (空POOR / re-POOR)
+            const long long miss_after = -W[3].lo_us;  // auto-miss this long after the note
+
+            std::vector<long long> nus(notes.size());
+            for (size_t i = 0; i < notes.size(); ++i)
+                // beatoraja stores note time as (long)microsec — TRUNCATION toward zero,
+                // not round-to-nearest (Section.java:528-530). Matching this is what aligns
+                // FAST/SLOW: an llround would push X.5+ up a µs and flip the sign vs the game.
+                nus[i] = static_cast<long long>(
+                    timeline.time_map.tick_to_second(timeline.notes[notes[i]].tick_exact) * 1e6);
+            std::vector<char> consumed(notes.size(), 0);  // state≠0 (hit or auto-missed)
+
+            size_t cur = 0;  // first note still reachable by a press (dmtime ≥ find_lo)
+            for (size_t hi = 0; hi < hits.size(); ++hi) {
+                const auto& hit = replay.hits[hits[hi]];
+                if (!hit.is_press) continue;
+                // Exact recorded press µs (both .brd and .lr2rep store the press time in
+                // time_sec) — avoids the second_to_tick→tick_to_second round-trip that
+                // quantized the press to the ~0.16 ms tick grid.
+                long long p_us = static_cast<long long>(std::llround(hit.time_sec * 1e6));
+
+                // (1) Time-driven auto-miss: any unconsumed note the clock has already passed
+                //     by more than |BD_late| can never be hit → judge 4 POOR, recorded LATE.
+                while (cur < notes.size() && nus[cur] + miss_after < p_us) {
+                    if (!consumed[cur]) {
+                        missed_notes_.push_back(&timeline.notes[notes[cur]]);
+                        missed_notes_count++;
+                        consumed[cur] = 1;
+                    }
+                    cur++;
+                }
+
+                // (2) Select the note beatoraja judges (JudgeManager:399-434, Combo).
+                //     Iterate earliest-first; classify by tier (fresh) or re-POOR (consumed).
+                int best = -1, best_judge = 0;
+                for (size_t i = cur; i < notes.size(); ++i) {
+                    long long dm = nus[i] - p_us;
+                    if (dm >= find_hi) break;            // dmtime ≥ mjudgeend
+                    if (dm < find_lo) continue;          // dmtime < mjudgestart
+                    // Combo gate (JudgeManager:411 + JudgeAlgorithm.Combo): consider note i
+                    // when nothing picked yet, the pick is consumed, or the pick is beyond
+                    // GOOD-late while a fresh i sits within GOOD-early (preserve combo).
+                    bool gate = (best < 0) || consumed[best]
+                              || (nus[best] < p_us + gd_lo && !consumed[i] && nus[i] <= p_us + gd_hi);
+                    if (!gate) continue;
+                    int judge_i;
+                    if (consumed[i]) {
+                        // already-judged note → re-POOR if within MS, else not selectable
+                        judge_i = (dm >= ms_lo && dm <= ms_hi) ? 5 : 6;
+                    } else {
+                        int ji = 0;
+                        for (; ji < 5 && !(dm >= W[ji].lo_us && dm <= W[ji].hi_us); ++ji) {}
+                        judge_i = (ji >= 4) ? ji + 1 : ji;   // 0-3 hit, 4(MS)→5 空POOR, 5→6 none
+                    }
+                    if (judge_i < 6) {
+                        long long abs_b = best < 0 ? 0 : (nus[best] - p_us < 0 ? p_us - nus[best] : nus[best] - p_us);
+                        long long abs_i = dm < 0 ? -dm : dm;
+                        if (judge_i < 4 || best < 0 || abs_b > abs_i) { best = static_cast<int>(i); best_judge = judge_i; }
+                    } else {
+                        best = -1;  // tnote = null
+                    }
+                }
+                if (best < 0) continue;               // no note in range → nothing recorded
+
+                long long dmtime = nus[best] - p_us;  // >0 early/FAST, <0 late/SLOW
+                HitResult hr;
+                hr.hit       = &hit;
+                hr.offset_ms = -static_cast<double>(dmtime) / 1000.0;  // press − note
+                if (dmtime >= 0) hr.fast = true; else hr.slow = true;  // (mfast>=0)=early
+
+                if (best_judge <= 3) {
+                    // PG/GR/GD/BD — score and consume (judgeVanish true).
+                    hr.note  = &timeline.notes[notes[best]];
+                    hr.judge = (best_judge == 0) ? Judge::PGREAT : (best_judge == 1) ? Judge::GREAT
+                             : (best_judge == 2) ? Judge::GOOD   : Judge::BAD;
+                    results_.push_back(hr);
+                    offsets_for_stats.push_back(hr.offset_ms);
+                    note_matched[notes[best]] = true;
+                    consumed[best] = 1;
+                    matched_hits++;
+                } else {
+                    // judge 5 → 空POOR: POOR, note NOT consumed (judgeVanish[5]=false).
+                    hr.judge = Judge::POOR;
+                    results_.push_back(hr);
+                    unmatched_hits++;
+                }
+            }
+
+            // (3) End of chart: every still-unconsumed note auto-misses (LATE POOR).
+            for (size_t i = cur; i < notes.size(); ++i)
+                if (!consumed[i]) {
+                    missed_notes_.push_back(&timeline.notes[notes[i]]);
+                    missed_notes_count++;
+                }
+        }
+    }
+
     // → Process each BMS lane independently — faithful port of LR2 ProcSinglenote
     //   (OpenLR2 LR2/Scene04_Play.cpp). Per lane a note cursor advances; each key
     //   press judges AT MOST one note. LR2 rules reproduced:
@@ -144,6 +281,7 @@ void JudgementEngine::analyze(const Timeline& timeline,
     //     • note ahead, BD < ahead <POOR → empty POOR         (op210 value 0), note kept
     //     • note ahead ≥ POOR (1000 ms)  → press ignored, nothing recorded
     //   (BAD→next-note carry at Scene04_Play.cpp:852 omitted for now — rare.)
+    if (system_ != JudgeSystem::Beatoraja)
     for (auto& kv : lane_notes) {
         int bms_lane = kv.first;
         const auto& notes = kv.second;  // sorted by tick
@@ -543,9 +681,13 @@ void JudgementEngine::analyze(const Timeline& timeline,
             ng[0]?sumg[0]/ng[0]:0.0, ng[0], ng[1]?sumg[1]/ng[1]:0.0, ng[1],
             ng[2]?sumg[2]/ng[2]:0.0, ng[2], ng[3]?sumg[3]/ng[3]:0.0, ng[3]);
     }
-    // Missed notes count as POOR (normal notes only, not LN)
+    // Missed notes count as POOR (normal notes only, not LN). In beatoraja the auto-miss
+    // (judge 4) is recorded LATE (mfast = note − mtime < 0), so it also adds to SLOW.
     for (auto* n : missed_notes_) {
-        if (n->end_tick == n->tick) pr++;
+        if (n->end_tick == n->tick) {
+            pr++;
+            if (system_ == JudgeSystem::Beatoraja) slw++;
+        }
     }
     stats_.pgreat = pg;
     stats_.great  = gr;

@@ -159,7 +159,7 @@ RawChartData BmsParser::parse(const std::string& filepath)
                 // recognized but ignored
             } else if (key == "RANK") {
                 int r = static_cast<int>(std::strtol(value.c_str(), nullptr, 10));
-                if (r >= 0 && r <= 3) chart.rank = r;
+                if (r >= 0 && r <= 4) chart.rank = r;  // 4 = VERY EASY (beatoraja)
             }
             continue;
         }

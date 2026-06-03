@@ -37,12 +37,37 @@ const JudgeWindow& JudgeProfile::get_window(JudgeSystem sys, JudgeRank rank) {
     return (sys == JudgeSystem::LR2) ? kLr2Windows[idx] : kBeatorajaWindows[idx];
 }
 
+// vanilla beatoraja SEVENKEYS asymmetric windows (µs). dmtime = note_us − press_us.
+// Base from beatoraja-src JudgeProperty.java; PG/GR/GD/BD scale by #RANK
+// {25,50,75,100,125}% (NORMAL rule), MS (POOR) is fixed. Scratch uses a wider set.
+void JudgeProfile::beatoraja_windows(int rank, bool scratch, BeatorajaWindow out[5]) {
+    static const long long note_base[5][2] = {
+        {-20000,  20000}, {-60000,  60000}, {-150000, 150000}, {-280000, 220000}, {-150000, 500000}
+    };
+    static const long long scr_base[5][2] = {
+        {-30000,  30000}, {-70000,  70000}, {-160000, 160000}, {-290000, 230000}, {-160000, 500000}
+    };
+    static const int pct[5] = { 25, 50, 75, 100, 125 };  // VERYHARD..VERYEASY
+    if (rank < 0) rank = 0; if (rank > 4) rank = 4;
+    const long long (*base)[2] = scratch ? scr_base : note_base;
+    for (int j = 0; j < 5; ++j) {
+        if (j < 4) {  // PG/GR/GD/BD scale by #RANK; MS (j==4) is fixed
+            out[j].lo_us = base[j][0] * pct[rank] / 100;
+            out[j].hi_us = base[j][1] * pct[rank] / 100;
+        } else {
+            out[j].lo_us = base[j][0];
+            out[j].hi_us = base[j][1];
+        }
+    }
+}
+
 const char* JudgeProfile::rank_string(JudgeRank rank) {
     switch (rank) {
         case JudgeRank::VERY_HARD: return "VERY HARD";
         case JudgeRank::HARD:      return "HARD";
         case JudgeRank::NORMAL:    return "NORMAL";
         case JudgeRank::EASY:      return "EASY";
+        case JudgeRank::VERY_EASY: return "VERY EASY";
     }
     return "???";
 }

@@ -92,6 +92,7 @@ Timeline build_timeline(const RawChartData& raw)
     struct LNState {
         bool   active    = false;
         tick_t head_tick = 0;
+        double head_tick_exact = 0.0;  // non-truncated head position
         int    head_wav  = 0;
         int    head_lane = 0;
         int    head_meas = 0;
@@ -127,10 +128,11 @@ Timeline build_timeline(const RawChartData& raw)
         auto& st = ln_states[channel];
         if (!st.active) return;
         NoteEvent ev;
-        ev.tick      = st.head_tick;
-        ev.end_tick  = st.head_tick;          // normal note: end == start
-        ev.lane      = static_cast<uint8_t>(st.head_lane);
-        ev.wav_index = static_cast<uint16_t>(st.head_wav);
+        ev.tick       = st.head_tick;
+        ev.tick_exact = st.head_tick_exact;
+        ev.end_tick   = st.head_tick;          // normal note: end == start
+        ev.lane       = static_cast<uint8_t>(st.head_lane);
+        ev.wav_index  = static_cast<uint16_t>(st.head_wav);
         tl.notes.push_back(ev);
         st.active = false;
     };
@@ -139,10 +141,11 @@ Timeline build_timeline(const RawChartData& raw)
         auto& st = ln_states[channel];
         if (!st.active) return;
         NoteEvent ev;
-        ev.tick      = st.head_tick;
-        ev.end_tick  = end_tick_val;          // LN: end from pairing LNOBJ
-        ev.lane      = static_cast<uint8_t>(st.head_lane);
-        ev.wav_index = static_cast<uint16_t>(st.head_wav);
+        ev.tick       = st.head_tick;
+        ev.tick_exact = st.head_tick_exact;
+        ev.end_tick   = end_tick_val;          // LN: end from pairing LNOBJ
+        ev.lane       = static_cast<uint8_t>(st.head_lane);
+        ev.wav_index  = static_cast<uint16_t>(st.head_wav);
         tl.notes.push_back(ev);
         total_ln_emitted++;
         total_yy_matched++;
@@ -181,6 +184,8 @@ Timeline build_timeline(const RawChartData& raw)
             for (int i = 0; i < num_steps; ++i) {
                 int val = ch.values[i];
                 tick_t step_tick = measure_start + (measure_length * i) / num_steps;
+                double step_tick_exact = static_cast<double>(measure_start)
+                    + static_cast<double>(measure_length) * i / num_steps;
 
                 bool is_lnobj = (raw.lnobj_set.count(val) > 0);
 
@@ -198,11 +203,12 @@ Timeline build_timeline(const RawChartData& raw)
                     // Normal note: replace pending head
                     // (previous head, if any, is a normal note that was never paired)
                     emit_normal(ch.channel);
-                    st.active    = true;
-                    st.head_tick = step_tick;
-                    st.head_wav  = val;
-                    st.head_lane = lane;
-                    st.head_meas = ch.measure;
+                    st.active          = true;
+                    st.head_tick       = step_tick;
+                    st.head_tick_exact = step_tick_exact;
+                    st.head_wav        = val;
+                    st.head_lane       = lane;
+                    st.head_meas       = ch.measure;
                 }
                 // val == 0: do nothing
             }
