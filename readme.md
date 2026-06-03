@@ -31,6 +31,7 @@ BMV (BMS Visualizer) 是一款 BMS 节奏游戏回放分析工具。导入谱面
 
 ### 近期 (v0.4)
 - [ ] beatoraja 判定系统重构
+- [ ] beatoraja0.8.6及以前版本的回放兼容
 - [ ] BMS 注释语法支持 (//, ;, /* */)
 - [ ] 元数据显示：#SUBTITLE, #SUBARTIST, #COMMENT, #DIFFICULTY
 - [ ] 字体重绘 (添加字母支持)
