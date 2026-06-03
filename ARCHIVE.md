@@ -1,16 +1,15 @@
 # BMV (BMS Viewer) — 开发归档文档
 
-> 最后更新: 2026-06-02
+> 最后更新: 2026-06-03
 > 语言: C++17 | 构建: CMake 3.20+ | 平台: Windows (MSVC) / Linux (GCC/Clang)
-> 总代码量: ~4,200 行 (src) | 版本: 3.0.1 | 模块: core, format, render, replay, judge, analysis, app
+> 总代码量: ~4,660 行 (src) | 版本: v0.3.1 | 模块: core, format, render, replay, judge, analysis, app
 > 当前阶段: Phase 3.0.1
 
 ---
 ## 0. 待办
-1.hash校验不完整
-2.旧版本的brd格式没兼容（testfile里还没放）
-3.回放解析解耦重构（方案见 ADR-22）
-4.中文路径会炸（UTF-8）：Windows 下 std::ifstream 窄字符路径按 ANSI 解释，中文路径打不开 → 文件打开统一走 std::filesystem::u8path、PNG 输出加 STBIW_WINDOWS_UTF8、CLI argv 转 UTF-8
+1.旧版本的brd格式没兼容（testfile里还没放）
+2.回放解析解耦重构（方案见 ADR-22）
+3.中文路径会炸（UTF-8）：Windows 下 std::ifstream 窄字符路径按 ANSI 解释，中文路径打不开 → 文件打开统一走 std::filesystem::u8path、PNG 输出加 STBIW_WINDOWS_UTF8、CLI argv 转 UTF-8
 ## 1. 项目定位
 
 BMV 是一个 **BMS 谱面分析工具**（非游戏本体、非编辑器）。
@@ -130,39 +129,39 @@ GUI:  BMS/BME File → Parser → Timeline ────→ ChartView (ImDrawList
 ```
 src/
 ├── core/
-│   ├── types.h              ( 43行)  所有事件 struct + BpmSource 枚举 + MeasureInfo
-│   ├── time_map.h/cpp       (112行)  Tick ↔ Second 双向转换（BPM+STOP）
-│   └── timeline.h/cpp       (326行)  Timeline 容器 + build_timeline 工厂
+│   ├── types.h              ( 54行)  所有事件 struct + BpmSource 枚举 + MeasureInfo
+│   ├── time_map.h/cpp       (142行)  Tick ↔ Second 双向转换（BPM+STOP）
+│   └── timeline.h/cpp       (370行)  Timeline 容器 + build_timeline 工厂
 ├── format/
-│   ├── raw_data.h           ( 31行)  Parser 输出的中间结构
-│   └── bms_parser.h/cpp     (223行)  BMS/BME 解析器 (base-36 + hex 分流)
+│   ├── raw_data.h           ( 41行)  Parser 输出的中间结构
+│   └── bms_parser.h/cpp     (260行)  BMS/BME 解析器 (base-36 + hex 分流)
 ├── render/
-│   ├── core_renderer.h      (180行)  共享渲染核心 (抽象的 Viewport + PixelBuf + CoreRenderer)
-│   └── png_renderer.h/cpp   (339行)  PNG 谱面渲染器 + Replay 叠加 + Random 乱序
+│   ├── core_renderer.h      (214行)  共享渲染核心 (抽象的 Viewport + PixelBuf + CoreRenderer)
+│   └── png_renderer.h/cpp   (403行)  PNG 谱面渲染器 + Replay 叠加 + Random 乱序
 ├── replay/
 │   ├── replay.h             (  4行)  聚合头文件 (include 以下三个)
-│   ├── replay_data.h        ( 38行)  ReplayHit, ReplayData, ReplayFormat, LR2RandomMode
-│   ├── ireplay_parser.h     ( 12行)  IReplayParser 抽象基类
-│   ├── brd_parser.h         ( 10行)  BrdParser 声明
-│   ├── brd_parser.cpp       (158行)  BRD 解析: GZIP→JSON→base64→GZIP→9-byte frames→State machine
-│   ├── lr2rep_parser.h      (  9行)  Lr2RepParser 声明
-│   ├── lr2rep_parser.cpp    ( 98行)  LR2 解析: 12B 记录→op 分类→Header/Body→ReplayData
-│   ├── lr2_random.h         ( 18行)  LR2Random 类 (魔改 MT19937 1998版)
-│   ├── lr2_random.cpp       ( 88行)  播种 + generateMT + temperAll + Fisher-Yates + 硬校验
-│   ├── base64.h             ( 38行)  URL-Safe Base64 解码
-│   └── gzip.h               ( 76行)  原生 GZIP 解压 (miniz tinfl)
+│   ├── replay_data.h        ( 49行)  ReplayHit, ReplayData, ReplayFormat, LR2RandomMode
+│   ├── ireplay_parser.h     ( 15行)  IReplayParser 抽象基类
+│   ├── brd_parser.h         ( 13行)  BrdParser 声明
+│   ├── brd_parser.cpp       (190行)  BRD 解析: GZIP→JSON→base64→GZIP→9-byte frames→State machine
+│   ├── lr2rep_parser.h      ( 12行)  Lr2RepParser 声明
+│   ├── lr2rep_parser.cpp    (118行)  LR2 解析: 12B 记录→op 分类→Header/Body→ReplayData
+│   ├── lr2_random.h         ( 23行)  LR2Random 类 (魔改 MT19937 1998版)
+│   ├── lr2_random.cpp       (105行)  播种 + generateMT + temperAll + Fisher-Yates + 硬校验
+│   ├── base64.h             ( 47行)  URL-Safe Base64 解码
+│   └── gzip.h               ( 97行)  原生 GZIP 解压 (miniz tinfl)
 ├── judge/
-│   └── judge_profile.h/cpp  ( 59行)  判定时机窗口配置 (Easy/Normal/Hard/VeryHard, LR2+Beatoraja)
+│   └── judge_profile.h/cpp  ( 75行)  判定时机窗口配置 (Easy/Normal/Hard/VeryHard, LR2+Beatoraja)
 ├── analysis/
-│   └── judgement_engine.h/cpp (580行) 回放判定分析 (游标匹配 + display_to_bms 暴露)
+│   └── judgement_engine.h/cpp (706行) 回放判定分析 (游标匹配 + display_to_bms 暴露)
 ├── app/
-│   ├── application.h/cpp    (514行)  GLFW 窗口 + ImGui TabBar + 主循环 + Hash 校验
+│   ├── application.h/cpp    (554行)  GLFW 窗口 + ImGui TabBar + 主循环 + Hash 校验
 │   └── panels/
-│       ├── chart_view.h/cpp (589行)  GPU 谱面视窗 + 交互控件 + 判定叠加 + Developer
-│       ├── video_export.h/cpp (291行)  FFmpeg Pipe 视频导出
-│       ├── welcome_panel.h/cpp ( 62行)  Welcome 页签渲染 (独立解耦)
-│       └── about_panel.h/cpp  ( 46行)  About 页签渲染 (独立解耦)
-└── main.cpp                 (125行)  双模式入口: GUI (无参) / CLI (带参)
+│       ├── chart_view.h/cpp (696行)  GPU 谱面视窗 + 交互控件 + 判定叠加 + Developer
+│       ├── video_export.h/cpp (349行)  FFmpeg Pipe 视频导出
+│       ├── welcome_panel.h/cpp ( 60行)  Welcome 页签渲染 (独立解耦)
+│       └── about_panel.h/cpp  ( 44行)  About 页签渲染 (独立解耦)
+└── main.cpp                 (146行)  双模式入口: GUI (无参) / CLI (带参)
 ```
 
 > **注意**: `replay.h` 已从原来的 64 行单体文件拆分为三个独立文件：
@@ -507,6 +506,11 @@ static int lane_to_column(int render_lane, bool is_2p) {
 | #RANDOM / #IF / #ENDIF | ✗ |
 | LNTYPE 2 (MGQ notation) | ✗ |
 | BMSON / PMS 格式 | ✗ |
+| 注释语法 (//, ;, /* */) | ✗ |
+| #BASE 62 进制 | ✗ |
+| 负 BPM (逆向滚动) | ✗ |
+| #RANK 4 (VERY EASY) | ✗ |
+| SCROLL / SPEED 扩展 | ✗ |
 
 ### 进制分流（关键）
 
@@ -998,6 +1002,14 @@ File → 工厂1(格式分派) ┬─→ LR2 parser ─────────�
 - Welcome 按钮通过 `WelcomeAction` 枚举返回值解耦，面板不依赖 Application 内部方法
 - Developer 开关替代条件编译：所有调试功能无需重新编译即可切换，对开发者更友好
 
+### ADR-30: LR2 判定与 op210 真值对齐 + beatoraja 窗口 rank 缩放修正 (2026-06-02)
+**决策**: 重写 `JudgementEngine::analyze()` 判定循环，完全对齐 LR2 `Scene04_Play.cpp ProcSinglenote` 逻辑，修正 beatoraja 窗口 rank 缩放方向。
+**理由**:
+- 原判定循环与 LR2 客户端不匹配，经 op210 逐音符对拍验证差距很大
+- 五大修正点：① 一次按键最多判一个 note (BAD 后可 chain)；② 空 POOR 仅在 note 在前方 200-1000ms 时产生；③ op10 (搓盘另一方向) 不参与判定；④ LR2 使用整数毫秒判定 (truncate)，浮点精度会导致边界翻档；⑤ beatoraja 窗口表 rank 缩放之前反了 (VERY_HARD 应为 25%，而非 125%)
+- 验证：对 `anata_g24.bme` + `.lr2rep` 进行 op210 逐档对照，PGREAT/GREAT/GOOD/BAD/漏判/空POOR/总数 7 项全等
+- 详见 `debug_2026_06_02.md`
+
 ---
 
 ## 12. 第三方依赖
@@ -1086,30 +1098,30 @@ File → 工厂1(格式分派) ┬─→ LR2 parser ─────────�
 
 ## 14. 未来阶段
 
-### Phase 2.5.2: LR2 Replay Verification（下一阶段）
-- op210 对拍验证（重算判定序列 vs LR2 内置判定）
-- Replay Statistics 面板
-- Replay Diagnostics / Validation 工具
+### Phase 2.5.2: LR2 Replay Verification — ✅ 已完成 (2026-06-02)
+- op210 对拍验证（重算判定序列 vs LR2 内置判定）→ PGREAT/GREAT/GOOD/BAD/漏判/空POOR/总数 7 项全等
+- 详见 `debug_2026_06_02.md`
 
-### Phase 2.x: GUI 增强
+### 近期 (v0.4)
+- beatoraja 判定系统重构（含 #RANK 4）—— 当前窗口 rank 缩放已修正，但仍需独立非对称判定路径
+- BMS 注释语法支持 (//, ;, /* */)
+- 负 BPM 处理 (逆向滚动)
+- 元数据显示：#SUBTITLE, #SUBARTIST, #COMMENT, #DIFFICULTY
+- 字体重绘 (添加字母支持)
+- 传参 + 目录内 hash 筛选 (简化拖谱流程)
 
-| 任务 | 优先级 |
-|------|--------|
-| 文件选择对话框 (ImGuiFileDialog) | P1 |
-| 音频播放 (miniaudio) | P1 |
-| 播放头 Seek + 拖拽 | P1 |
-| 多种谱面对比视图 | P2 |
+### 中期 (v0.5)
+- #BASE 62 进制支持
+- .bmson 解析支持 (BmsonParser)
+- 5K BMS 布局适配
+- 回放解析解耦重构（方案见 ADR-22）
+- 谱面波形图
 
-### Phase 3: 高级功能
-
-| 任务 | 优先级 |
-|------|--------|
-| #RANDOM / #IF 条件展开 | P1 |
-| LNTYPE 2 (MGQ notation) | P1 |
-| S-RANDOM / R-RANDOM 实际还原 | P1 |
-| Keysound 重建 | P1 |
-| BGA 渲染 | P2 |
-| BMSON / PMS 支持 | P2 |
+### 远期 (v1.0)
+- #LNTYPE 1 通道支持 (0x51-0x69)
+- #SCROLLxx / #SPEEDxx 渲染支持
+- 地雷通道 (D1-D9, E1-E9) 可视化
+- DP/Couple Play (#PLAYER 2/3) 支持
 
 ---
 
@@ -1118,13 +1130,12 @@ File → 工厂1(格式分派) ┬─→ LR2 parser ─────────�
 | 文件 | 内容 |
 |------|------|
 | `ARCHIVE.md` | 本文件 — 项目开发归档（最全面） |
+| `readme.md` | 项目简介、功能列表、现有缺陷、Todo |
 | `PROJECT_INTRO.md` | 项目接手介绍文档 (快速上手用) |
-| `judge_LR2.md` | LR2 判定系统参考 |
-| `judge_raja.md` | Beatoraja 判定系统参考 |
-| `lr2.md` | LR2 内部机制笔记 |
-| `lr2rep_format.md` | .lr2rep 二进制格式文档（逆向分析） |
-| `raja.md` | Beatoraja 内部机制笔记 |
+| `debug_2026_06_02.md` | Debug 记录：LR2 判定与 op210 对齐 + beatoraja 窗口修正 |
 | `CMakeLists.txt` | 构建配置 (FetchContent GLFW + ImGui) |
+
+> 注：`judge_LR2.md`、`judge_raja.md`、`lr2.md`、`lr2rep_format.md`、`raja.md` 等参考笔记已移除，判定相关信息已整合进源代码注释和 `debug_2026_06_02.md`。
 
 ---
 
