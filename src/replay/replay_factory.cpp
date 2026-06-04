@@ -9,7 +9,9 @@ namespace bmv {
 std::optional<ReplayInput> parse_replay(const std::string& path) {
     auto dot = path.rfind('.');
     if (dot == std::string::npos) {
+#ifdef BMV_DEBUG
         std::fprintf(stderr, "[parse_replay] no extension: %s\n", path.c_str());
+#endif
         return std::nullopt;
     }
 
@@ -18,13 +20,19 @@ std::optional<ReplayInput> parse_replay(const std::string& path) {
 
     if (ext == ".brd") {
         BrdParser parser;
-        return parser.parse_replay_input(path);
+        auto result = parser.parse_replay_input(path);
+        if (result.events.empty()) return std::nullopt;
+        return result;
     } else if (ext == ".lr2rep") {
         Lr2RepParser parser;
-        return parser.parse_replay_input(path);
+        auto result = parser.parse_replay_input(path);
+        if (result.events.empty()) return std::nullopt;
+        return result;
     }
 
+#ifdef BMV_DEBUG
     std::fprintf(stderr, "[parse_replay] unsupported format: %s\n", ext.c_str());
+#endif
     return std::nullopt;
 }
 

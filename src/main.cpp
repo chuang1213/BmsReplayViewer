@@ -60,12 +60,35 @@ static int run_cli(int argc, char* argv[]) {
     if (!replay_path.empty()) {
         std::printf("Parsing replay: %s\n", replay_path.c_str());
         auto input = bmv::parse_replay(replay_path);
-        if (input) {
+        if (!input) {
+            std::fprintf(stderr, "Warning: failed to parse replay '%s', continuing without replay\n", replay_path.c_str());
+        } else {
             replay_data = bmv::replay_input_to_replay_data(input.value(), timeline.time_map);
             replay_ptr = &replay_data;
-            std::printf("  Hits: %zu, shuffle: %s\n",
-                         replay_data.hits.size(),
-                         replay_data.has_shuffle ? "YES" : "NO");
+
+            // Replay statistics (moved from parser library)
+            if (input->format == bmv::ReplayFormat::BRD) {
+                std::printf("  Format: BRD, Hits: %zu, Unmatched: %d, Shuffle: %s\n",
+                             replay_data.hits.size(), replay_data.unmatched,
+                             input->brd.has_shuffle ? "YES" : "NO");
+            } else {
+                auto mode_name = [](bmv::LR2RandomMode m) -> const char* {
+                    if (m == bmv::LR2RandomMode::Mirror)  return "MIRROR";
+                    if (m == bmv::LR2RandomMode::Random)  return "RANDOM";
+                    if (m == bmv::LR2RandomMode::SRandom) return "S-RANDOM";
+                    if (m == bmv::LR2RandomMode::RRandom) return "R-RANDOM";
+                    return "OFF";
+                };
+                int recorded_hits = 0;
+                for (auto& h : replay_data.hits) if (h.is_press) recorded_hits++;
+                std::printf("  Format: LR2REP, Hits: %zu (%d KeyDown)\n",
+                             replay_data.hits.size(), recorded_hits);
+                std::printf("  P1 Random: %s  P2 Random: %s  Seed: %d  op210: %zu\n",
+                             mode_name(replay_data.random_mode[0]),
+                             mode_name(replay_data.random_mode[1]),
+                             replay_data.random_seed,
+                             replay_data.lr2_judgements.size());
+            }
 
             // Judge audit (CLI test) — auto-detect system from replay format
             bmv::JudgementEngine je;

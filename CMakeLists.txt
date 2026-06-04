@@ -76,6 +76,12 @@ if(WIN32)
     target_link_libraries(bmv PRIVATE opengl32)
 endif()
 
+# Debug logging control for library code
+option(BMV_DEBUG "Enable debug logging in library code" OFF)
+if(BMV_DEBUG)
+    target_compile_definitions(bmv PRIVATE BMV_DEBUG)
+endif()
+
 if(MSVC)
     target_compile_options(bmv PRIVATE /W4 /utf-8)
     target_compile_definitions(bmv PRIVATE _CRT_SECURE_NO_WARNINGS)

@@ -39,7 +39,9 @@ static std::vector<uint8_t> brd_unwrap_json(const std::vector<uint8_t>& raw,
     std::string json_str(json_bytes.begin(), json_bytes.end());
     auto j = nlohmann::json::parse(json_str, nullptr, false);
     if (j.is_discarded()) {
+#ifdef BMV_DEBUG
         std::fprintf(stderr, "[BrdParser] JSON parse failed\n");
+#endif
         return {};
     }
 
@@ -50,7 +52,9 @@ static std::vector<uint8_t> brd_unwrap_json(const std::vector<uint8_t>& raw,
     // Version detection stub:
     // int brd_version = detect_brd_version(j);
     // if (brd_version < 0) {
+    // #ifdef BMV_DEBUG
     //     std::fprintf(stderr, "[BrdParser] Unknown BRD version, attempting latest format...\n");
+    // #endif
     // }
 
     out_json = std::move(j);
@@ -68,8 +72,10 @@ static std::vector<RawInputEvent> brd_decode_frames(const std::vector<uint8_t>& 
     std::vector<RawInputEvent> events;
 
     if (bin.size() % 9 != 0) {
+#ifdef BMV_DEBUG
         std::fprintf(stderr, "[BrdParser] warning: binary stream size %zu not multiple of 9\n",
                      bin.size());
+#endif
     }
 
     size_t frames = bin.size() / 9;
@@ -124,7 +130,6 @@ ReplayInput BrdParser::parse_replay_input(const std::string& filepath) {
 
     auto raw = brd_read_file(filepath);
     if (raw.empty()) {
-        std::fprintf(stderr, "[BrdParser] cannot read file: %s\n", filepath.c_str());
         return input;
     }
 
@@ -135,14 +140,18 @@ ReplayInput BrdParser::parse_replay_input(const std::string& filepath) {
     input.brd = brd_extract_meta(j);
 
     if (!j.contains("keyinput") || !j["keyinput"].is_string()) {
+#ifdef BMV_DEBUG
         std::fprintf(stderr, "[BrdParser] missing 'keyinput' field\n");
+#endif
         return input;
     }
     std::string keyinput = j["keyinput"].get<std::string>();
 
     auto decoded = base64::decode(keyinput);
     if (decoded.empty()) {
+#ifdef BMV_DEBUG
         std::fprintf(stderr, "[BrdParser] base64 decode produced no data\n");
+#endif
         return input;
     }
 
@@ -161,10 +170,6 @@ ReplayData BrdParser::parse(const std::string& filepath,
     if (input.events.empty()) return {};
 
     ReplayData result = replay_input_to_replay_data(input, time_map);
-
-    std::fprintf(stdout, "[BrdParser] %s: %zu hits, %d unmatched, shuffle=%s\n",
-                 filepath.c_str(), result.hits.size(), result.unmatched,
-                 result.has_shuffle ? "YES" : "NO");
 
     return result;
 }

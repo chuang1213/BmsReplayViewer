@@ -48,6 +48,10 @@ public:
     void set_player_index(int idx) { player_idx_ = idx; }
     int  player_index() const { return player_idx_; }
 
+    // Computes display↔BMS lane mappings based on replay shuffle/random configuration.
+    // NOTE: Lane mapping is executed HERE (in JudgementEngine), not in the parser layer.
+    // RawInputEvent.lane uses unified display lanes (0=scratch, 1-7=keys).
+    // This method applies shuffle/random transforms to map display lanes to BMS channel lanes.
     void compute_lane_mappings(const ReplayData& replay);
 
     void analyze(const Timeline& timeline,

@@ -48,7 +48,9 @@ static std::vector<RawInputEvent> lr2_decode_records(const std::vector<uint8_t>&
     size_t size = buf.size();
 
     if (size % 12 != 0) {
+#ifdef BMV_DEBUG
         std::fprintf(stderr, "[Lr2RepParser] invalid file size %zu (not multiple of 12)\n", size);
+#endif
         return events;
     }
 
@@ -71,14 +73,18 @@ static std::vector<RawInputEvent> lr2_decode_records(const std::vector<uint8_t>&
                     out_meta.has_random_info[0] = true;
                     out_meta.random_mode[0] = static_cast<LR2RandomMode>(value);
                 } else {
+#ifdef BMV_DEBUG
                     std::fprintf(stderr, "[Lr2RepParser] P1 invalid random_mode=%d, defaulting OFF\n", value);
+#endif
                 }
             } else if (op == 153) {
                 if (value >= 0 && value <= 4) {
                     out_meta.has_random_info[1] = true;
                     out_meta.random_mode[1] = static_cast<LR2RandomMode>(value);
                 } else {
+#ifdef BMV_DEBUG
                     std::fprintf(stderr, "[Lr2RepParser] P2 invalid random_mode=%d, defaulting OFF\n", value);
+#endif
                 }
             } else if (op == 200) {
                 out_meta.seed = value;
@@ -103,26 +109,10 @@ ReplayInput Lr2RepParser::parse_replay_input(const std::string& filepath) {
 
     auto buf = lr2_read_file(filepath);
     if (buf.empty()) {
-        std::fprintf(stderr, "[Lr2RepParser] cannot open: %s\n", filepath.c_str());
         return input;
     }
 
     input.events = lr2_decode_records(buf, input.lr2, input.duration_us);
-
-    auto mode_name = [](LR2RandomMode m) -> const char* {
-        if (m == LR2RandomMode::Mirror)  return "MIRROR";
-        if (m == LR2RandomMode::Random)  return "RANDOM";
-        if (m == LR2RandomMode::SRandom) return "S-RANDOM";
-        if (m == LR2RandomMode::RRandom) return "R-RANDOM";
-        return "OFF";
-    };
-
-    std::fprintf(stdout,
-        "[Lr2RepParser] %s: %zu raw events, format=LR2REP\n"
-        "  P1 Random Mode: %s  P2 Random Mode: %s  |  Seed: %d  |  op210: %zu\n",
-        filepath.c_str(), input.events.size(),
-        mode_name(input.lr2.random_mode[0]), mode_name(input.lr2.random_mode[1]),
-        input.lr2.seed, input.lr2.op210.size());
 
     return input;
 }
@@ -135,24 +125,6 @@ ReplayData Lr2RepParser::parse(const std::string& filepath,
     if (input.events.empty()) return {};
 
     ReplayData result = replay_input_to_replay_data(input, time_map);
-
-    auto mode_name = [](LR2RandomMode m) -> const char* {
-        if (m == LR2RandomMode::Mirror)  return "MIRROR";
-        if (m == LR2RandomMode::Random)  return "RANDOM";
-        if (m == LR2RandomMode::SRandom) return "S-RANDOM";
-        if (m == LR2RandomMode::RRandom) return "R-RANDOM";
-        return "OFF";
-    };
-
-    int recorded_hits = 0;
-    for (auto& h : result.hits) if (h.is_press) recorded_hits++;
-
-    std::fprintf(stdout,
-        "[Lr2RepParser] %s: %zu hits (%d KeyDown), format=LR2REP\n"
-        "  P1 Random Mode: %s  P2 Random Mode: %s  |  Seed: %d  |  op210: %zu\n",
-        filepath.c_str(), result.hits.size(), recorded_hits,
-        mode_name(result.random_mode[0]), mode_name(result.random_mode[1]),
-        result.random_seed, result.lr2_judgements.size());
 
     return result;
 }
