@@ -98,7 +98,7 @@ cmake --build build --config Debug
 
 ### 高优先级
 - [ ] beatoraja 0.8.6 及以前版本的回放兼容（testfile 中需补充旧版 brd 样本）
-- [ ] 回放解析解耦重构（工厂1: 格式分派 + 工厂2: brd 版本分派 + 统一 ReplayData，详见 ADR-22）
+- [x] 回放解析解耦重构（工厂1: 格式分派 + 工厂2: brd 版本分派 + 统一 ReplayData，详见 ADR-22）
 - [ ] 详细的判定分析和统计（FAST/SLOW 分布、mean/stddev 时序偏移可视化、逐 note 判定详情面板）
 
 ### 中优先级
