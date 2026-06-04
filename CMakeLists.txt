@@ -41,6 +41,8 @@ add_executable(bmv
     src/replay/brd_parser.cpp
     src/replay/lr2rep_parser.cpp
     src/replay/lr2_random.cpp
+    src/replay/replay_adapter.cpp
+    src/replay/replay_factory.cpp
     src/app/application.cpp
     src/app/panels/chart_view.cpp
     src/app/panels/video_export.cpp
@@ -72,6 +74,12 @@ target_include_directories(bmv PRIVATE
 target_link_libraries(bmv PRIVATE glfw)
 if(WIN32)
     target_link_libraries(bmv PRIVATE opengl32)
+endif()
+
+# Debug logging control for library code
+option(BMV_DEBUG "Enable debug logging in library code" OFF)
+if(BMV_DEBUG)
+    target_compile_definitions(bmv PRIVATE BMV_DEBUG)
 endif()
 
 if(MSVC)

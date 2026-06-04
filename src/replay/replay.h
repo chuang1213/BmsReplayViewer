@@ -1,4 +1,5 @@
 #pragma once
 #include "replay_data.h"
-#include "ireplay_parser.h"
-#include "brd_parser.h"
+#include "raw_input_event.h"
+#include "replay_adapter.h"
+#include "replay_factory.h"

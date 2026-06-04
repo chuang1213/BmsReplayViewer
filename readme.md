@@ -59,11 +59,46 @@ cmake --build build --config Debug
 ```
 
 
+## 回放解析架构
+
+### 三层模型
+回放解析采用三层流水线设计：
+
+1. **文件读取层**（`brd_parser.cpp` / `lr2rep_parser.cpp`）
+   - 负责读取原始文件、解压缩、格式解码
+   - BRD: GZIP → JSON → base64 → GZIP → 9字节帧流
+   - LR2REP: 直接读取 12字节 LE 记录流
+   - 输出统一的 `RawInputEvent` 列表（press/release 分离，不配对）
+
+2. **RawInputEvent 转换层**（`replay_adapter.cpp`，临时适配层）
+   - 将 `RawInputEvent` 转换为 legacy `ReplayData`
+   - BRD 路径：状态机按 lane 配对 press/release → `ReplayHit`
+   - LR2 路径：每个事件直接转为一个 `ReplayHit`
+   - 通过 `TimeMap` 将微秒时间戳转换为 tick
+
+3. **TimeMap 映射层**（`judgement_engine.cpp`）
+   - `compute_lane_mappings()` 在此处执行 shuffle/random 映射
+   - 将显示 lane 映射到 BMS 通道 lane
+
+### ReplayInput vs ReplayData
+- **`ReplayInput`**：新接口，包含 `RawInputEvent` + 元数据（`Lr2Meta`/`BrdMeta`），不依赖 `TimeMap`
+- **`ReplayData`**：旧接口，包含 `ReplayHit`（已配对、已转换 tick），依赖 `TimeMap`
+- 下游消费者未来应直接使用 `ReplayInput`，`replay_adapter` 为 Phase 3 删除候选
+
+### 格式差异统一方式
+- BRD 和 LR2REP 的事件模型不同（BRD 为 base64+GZIP 压缩帧流，LR2 为原始二进制记录），但统一输出为 `RawInputEvent`
+- 物理 keycode → 统一显示 lane 的映射在各自 parser 内完成
+
+### Lane 坐标系
+- `RawInputEvent.lane` 和 `ReplayHit.lane` 均使用统一显示 lane
+- **0 = scratch（转盘），1-7 = 按键（K1-K7）**
+- shuffle/random 映射在 `JudgementEngine::compute_lane_mappings()` 中执行
+
 ## 开发待办
 
 ### 高优先级
 - [ ] beatoraja 0.8.6 及以前版本的回放兼容（testfile 中需补充旧版 brd 样本）
-- [ ] 回放解析解耦重构（工厂1: 格式分派 + 工厂2: brd 版本分派 + 统一 ReplayData，详见 ADR-22）
+- [x] 回放解析解耦重构（工厂1: 格式分派 + 工厂2: brd 版本分派 + 统一 ReplayData，详见 ADR-22）
 - [ ] 详细的判定分析和统计（FAST/SLOW 分布、mean/stddev 时序偏移可视化、逐 note 判定详情面板）
 
 ### 中优先级
