@@ -44,6 +44,9 @@ static const char* lr2_val_name(uint8_t v) {
 }
 
 void JudgementEngine::compute_lane_mappings(const ReplayData& replay) {
+    // Unified lane coordinate system: 0=scratch, 1-7=keys (physical/display lanes).
+    // ReplayHit.lane is already in display-lane space after brd_decode_frames / lr2_decode_records.
+    // This function maps display_lane → bms_lane (for note comparison) and bms_lane → display_lane (for rendering).
     for (int i = 0; i < 8; ++i) {
         computed_display_to_bms_[i] = i;
         computed_bms_to_display_[i] = i;

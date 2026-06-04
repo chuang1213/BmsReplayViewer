@@ -41,6 +41,8 @@ add_executable(bmv
     src/replay/brd_parser.cpp
     src/replay/lr2rep_parser.cpp
     src/replay/lr2_random.cpp
+    src/replay/replay_adapter.cpp
+    src/replay/replay_factory.cpp
     src/app/application.cpp
     src/app/panels/chart_view.cpp
     src/app/panels/video_export.cpp

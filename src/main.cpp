@@ -3,7 +3,6 @@
 #include "render/png_renderer.h"
 #include "replay/replay.h"
 #include "replay/lr2_random.h"
-#include "replay/lr2rep_parser.h"
 #include "app/application.h"
 #include "analysis/judgement_engine.h"
 
@@ -60,21 +59,9 @@ static int run_cli(int argc, char* argv[]) {
 
     if (!replay_path.empty()) {
         std::printf("Parsing replay: %s\n", replay_path.c_str());
-        auto dot = replay_path.rfind('.');
-        bool is_lr2 = false;
-        if (dot != std::string::npos) {
-            std::string ext = replay_path.substr(dot);
-            for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            is_lr2 = (ext == ".lr2rep");
-        }
-        if (is_lr2) {
-            bmv::Lr2RepParser lr2;
-            replay_data = lr2.parse(replay_path, timeline.time_map);
-        } else {
-            bmv::BrdParser brd;
-            replay_data = brd.parse(replay_path, timeline.time_map);
-        }
-        if (!replay_data.hits.empty()) {
+        auto input = bmv::parse_replay(replay_path);
+        if (input) {
+            replay_data = bmv::replay_input_to_replay_data(input.value(), timeline.time_map);
             replay_ptr = &replay_data;
             std::printf("  Hits: %zu, shuffle: %s\n",
                          replay_data.hits.size(),
@@ -82,6 +69,7 @@ static int run_cli(int argc, char* argv[]) {
 
             // Judge audit (CLI test) — auto-detect system from replay format
             bmv::JudgementEngine je;
+            bool is_lr2 = (input->format == bmv::ReplayFormat::LR2REP);
             je.set_system(is_lr2 ? bmv::JudgeSystem::LR2 : bmv::JudgeSystem::Beatoraja);
             je.analyze(timeline, replay_data);
         }

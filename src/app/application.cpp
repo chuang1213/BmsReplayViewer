@@ -1,6 +1,6 @@
 #include "application.h"
 #include "format/bms_parser.h"
-#include "replay/lr2rep_parser.h"
+#include "replay/replay.h"
 #include "app/panels/welcome_panel.h"
 #include "app/panels/about_panel.h"
 #include "picosha2.h"
@@ -113,22 +113,13 @@ void Application::load_replay_file(const std::string& path) {
         std::fprintf(stderr, "[Application] load chart first\n");
         return;
     }
-    auto dot = path.rfind('.');
-    std::string ext;
-    if (dot != std::string::npos) {
-        ext = path.substr(dot);
-        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (ext == ".lr2rep") {
-            Lr2RepParser lr2;
-            replay_data_ = lr2.parse(path.c_str(), timeline_.time_map);
-        } else {
-            BrdParser brd;
-            replay_data_ = brd.parse(path.c_str(), timeline_.time_map);
-        }
-    } else {
-        std::fprintf(stderr, "[Application] unsupported replay extension: %s\n", path.c_str());
+    auto input = parse_replay(path);
+    if (!input) {
+        std::fprintf(stderr, "[Application] failed to parse replay: %s\n", path.c_str());
         return;
     }
+    replay_data_ = replay_input_to_replay_data(input.value(), timeline_.time_map);
+
     add_recent_replay(path);
     replay_loaded_ = true;
     std::printf("[Application] loaded replay: %s (%zu hits)\n",
@@ -139,7 +130,7 @@ void Application::load_replay_file(const std::string& path) {
         std::filesystem::path rp(path);
         std::string stem = rp.stem().string();
         bool ok = false;
-        if (ext == ".lr2rep")
+        if (input->format == ReplayFormat::LR2REP)
             ok = stem.find(bms_md5_) != std::string::npos;
         else
             ok = stem.find(bms_sha256_) != std::string::npos;
