@@ -6,7 +6,7 @@ namespace bmv {
 WelcomeAction render_welcome_panel() {
     WelcomeAction action = WelcomeAction::None;
 
-    ImGui::Text("BMV -- BMS Visualizer");
+    ImGui::Text("BMS ReplayVisualizer");
     ImGui::Separator();
     ImGui::Spacing();
 

@@ -27,6 +27,8 @@ public:
 
     void render_analyzer();
     void render_controls_child();
+    void render_analysis_panel();   // 左栏 - 分析面板
+    void render_settings_panel();   // 右栏 - 设置面板
 
     static int lane_to_column(int render_lane, bool is_2p);
 
@@ -48,6 +50,19 @@ public:
     void    set_auto_follow_playback(bool v)  { auto_follow_playback_ = v; }
     float   note_speed()             const { return note_speed_; }
     void    set_note_speed(float v)        { note_speed_ = v; }
+
+    // 新增: chart_speed 控制 pixels_per_tick_
+    float   chart_speed()            const { return static_cast<float>(pixels_per_tick_); }
+    void    set_chart_speed(float v)       { pixels_per_tick_ = static_cast<double>(v); }
+
+    // 新增: F/S 显示控制
+    bool    show_fs_labels()         const { return show_fs_labels_; }
+    void    set_show_fs_labels(bool v)     { show_fs_labels_ = v; }
+
+    // 分析面板需要的数据访问
+    const JudgementEngine& judgement_engine() const { return judge_engine_; }
+    const Timeline* timeline_ptr() const { return timeline_; }
+    const ReplayData* replay_ptr() const { return replay_; }
 
     bool    show_dev_options    = false;
     bool    show_debug_overlay  = false;
@@ -73,6 +88,7 @@ private:
     int    scroll_distance_          = 7680;
     bool   auto_follow_playback_     = true;
     bool   show_releases_            = false;
+    bool   show_fs_labels_           = true;
     ReplayDisplayMode replay_display_mode_ = ReplayDisplayMode::LineOnly;
 
     static constexpr int    kNumLanes       = 8;
@@ -95,6 +111,7 @@ private:
     void draw_miss_notes(ImDrawList* dl, const ImVec2& win_pos, const ImVec2& win_size);
     void handle_input();
     void render_controls_inline();
+    void render_density_chart(ImDrawList* dl, const ImVec2& pos, const ImVec2& size); // 中栏底部密度图
 };
 
 } // namespace bmv

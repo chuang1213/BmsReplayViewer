@@ -322,7 +322,8 @@ void ChartView::draw_replay_hits(ImDrawList* dl, const ImVec2& win_pos,
                         box_color, 0.0f, 0, line_thk);
         }
 
-        if ((is_fast || is_slow) && jg != Judge::PGREAT) {
+        // 新增: 用 show_fs_labels_ 控制是否绘制 F/S 标签文字
+        if (show_fs_labels_ && (is_fast || is_slow) && jg != Judge::PGREAT) {
             char buf[16];
             std::snprintf(buf, sizeof(buf), "%c%d",
                           is_fast ? 'F' : 'S', std::abs(offset));
@@ -510,6 +511,333 @@ void ChartView::render_controls_child() {
     render_controls_inline();
 }
 
+// 新增: 左栏 - 分析面板 (时序偏移分布直方图 + 判定统计)
+void ChartView::render_analysis_panel() {
+    if (!timeline_ || !replay_ || replay_->hits.empty()) {
+        ImGui::TextDisabled("No replay loaded.");
+        return;
+    }
+
+    const auto& results = judge_engine_.results();
+    if (results.empty()) {
+        ImGui::TextDisabled("No judgement data.");
+        return;
+    }
+
+    // 时序偏移分布直方图
+    ImGui::SeparatorText("Timing Distribution");
+    {
+        constexpr int kBucketCount = 40;
+        constexpr float kRangeMin = -100.0f;
+        constexpr float kRangeMax = 100.0f;
+        constexpr float kBucketWidth = (kRangeMax - kRangeMin) / kBucketCount;
+        int buckets[kBucketCount] = {};
+
+        for (const auto& hr : results) {
+            if (hr.is_release) continue;
+            float offset = static_cast<float>(hr.offset_ms);
+            int idx = static_cast<int>((offset - kRangeMin) / kBucketWidth);
+            if (idx >= 0 && idx < kBucketCount) buckets[idx]++;
+        }
+
+        int max_count = 1;
+        for (int i = 0; i < kBucketCount; ++i)
+            if (buckets[i] > max_count) max_count = buckets[i];
+
+        ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+        float canvas_w = ImGui::GetContentRegionAvail().x;
+        float canvas_h = 120.0f;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        // 背景
+        dl->AddRectFilled(canvas_pos,
+            ImVec2(canvas_pos.x + canvas_w, canvas_pos.y + canvas_h),
+            IM_COL32(20, 20, 40, 255));
+
+        // 零线
+        float zero_x = canvas_pos.x + canvas_w * (-kRangeMin) / (kRangeMax - kRangeMin);
+        dl->AddLine(ImVec2(zero_x, canvas_pos.y),
+                    ImVec2(zero_x, canvas_pos.y + canvas_h),
+                    IM_COL32(120, 120, 160, 200), 1.0f);
+
+        // 柱状图
+        float bar_w = canvas_w / kBucketCount;
+        for (int i = 0; i < kBucketCount; ++i) {
+            float bar_h = (static_cast<float>(buckets[i]) / max_count) * (canvas_h - 4.0f);
+            float bx = canvas_pos.x + i * bar_w;
+            float by = canvas_pos.y + canvas_h - bar_h;
+            ImU32 col = (i < kBucketCount / 2)
+                ? IM_COL32(128, 220, 255, 180)   // FAST 侧 (蓝色)
+                : IM_COL32(255, 180, 180, 180);   // SLOW 侧 (红色)
+            dl->AddRectFilled(ImVec2(bx, by),
+                              ImVec2(bx + bar_w - 1.0f, canvas_pos.y + canvas_h),
+                              col);
+        }
+
+        // 标签
+        dl->AddText(ImVec2(canvas_pos.x + 2, canvas_pos.y + 2),
+                    IM_COL32(128, 220, 255, 200), "FAST");
+        dl->AddText(ImVec2(canvas_pos.x + canvas_w - 36, canvas_pos.y + 2),
+                    IM_COL32(255, 180, 180, 200), "SLOW");
+
+        ImGui::Dummy(ImVec2(canvas_w, canvas_h));
+
+        // 刻度标签
+        ImGui::TextDisabled("-100ms");
+        ImGui::SameLine(canvas_w * 0.5f - 4.0f);
+        ImGui::TextDisabled("0");
+        ImGui::SameLine(canvas_w - 36.0f);
+        ImGui::TextDisabled("+100ms");
+    }
+
+    ImGui::Spacing();
+
+    // 判定统计面板
+    ImGui::SeparatorText("Judgement Stats");
+    {
+        const auto& s = judge_engine_.statistics();
+
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "PGREAT: %d", s.pgreat);
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "GREAT:  %d", s.great);
+        ImGui::TextColored(ImVec4(0.3f, 0.6f, 1.0f, 1.0f), "GOOD:   %d", s.good);
+        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "BAD:    %d", s.bad);
+        ImGui::TextColored(ImVec4(0.7f, 0.3f, 1.0f, 1.0f), "POOR:   %d", s.poor);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextColored(ImVec4(0.5f, 0.85f, 1.0f, 1.0f), "FAST: %d", s.fast);
+        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.7f, 1.0f), "SLOW: %d", s.slow);
+
+        ImGui::Spacing();
+        ImGui::Text("Mean:   %.1f ms", s.mean_offset);
+        ImGui::Text("StdDev: %.1f ms", s.stddev_offset);
+    }
+}
+
+// 新增: 右栏 - 设置面板 (BASIC + 样式)
+void ChartView::render_settings_panel() {
+    // BASIC 分组
+    ImGui::SeparatorText("BASIC");
+
+    ImGui::SliderFloat("Note Speed", &note_speed_, 0.5f, 2.0f, "%.2fx");
+
+    float cs = chart_speed();
+    if (ImGui::SliderFloat("Chart Speed", &cs, 0.01f, 1.0f, "%.3f")) {
+        set_chart_speed(cs);
+    }
+
+    int layout = config.is_2p_layout ? 2 : 1;
+    ImGui::RadioButton("1P", &layout, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("2P", &layout, 2);
+    config.is_2p_layout = (layout == 2);
+
+    ImGui::Spacing();
+
+    // 样式 分组
+    ImGui::SeparatorText("Style");
+
+    int rdm = static_cast<int>(replay_display_mode_);
+    ImGui::RadioButton("Line", &rdm, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Box", &rdm, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("Marker", &rdm, 2);
+    replay_display_mode_ = static_cast<ReplayDisplayMode>(rdm);
+
+    ImGui::SliderFloat("Note Thickness", &note_thickness_, 1.0f, 20.0f, "%.0f");
+
+    ImGui::Checkbox("Show F/S Labels", &show_fs_labels_);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // 其他设置 (保留原有功能)
+    ImGui::SeparatorText("View");
+    ImGui::Checkbox("Show Replay", &config.show_replay);
+    ImGui::Checkbox("Show Releases", &show_releases_);
+
+    static const int kScrollTickValues[] = { 3840, 7680, 11520, 15360 };
+    static const char* kScrollLabels[]    = { "0.5 measure", "1 measure", "1.5 measures", "2 measures" };
+    int scroll_idx = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (scroll_distance_ >= kScrollTickValues[i]) scroll_idx = i;
+    }
+    if (ImGui::Combo("Scroll Distance", &scroll_idx, kScrollLabels, IM_ARRAYSIZE(kScrollLabels))) {
+        scroll_distance_ = kScrollTickValues[scroll_idx];
+    }
+    ImGui::Checkbox("Auto Follow Playback", &auto_follow_playback_);
+
+    ImGui::SeparatorText("Judge System");
+    int js = (judge_engine_.system() == JudgeSystem::LR2) ? 0 : 1;
+    if (ImGui::RadioButton("LR2", &js, 0)) {
+        judge_engine_.set_system(JudgeSystem::LR2);
+        if (timeline_ && replay_ && !replay_->hits.empty())
+            judge_engine_.analyze(*timeline_, *replay_);
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("beatoraja", &js, 1)) {
+        judge_engine_.set_system(JudgeSystem::Beatoraja);
+        if (timeline_ && replay_ && !replay_->hits.empty())
+            judge_engine_.analyze(*timeline_, *replay_);
+    }
+
+    ImGui::Separator();
+    ImGui::TextDisabled("Scroll: Wheel  |  Zoom: Ctrl+Wheel");
+    if (timeline_) {
+        ImGui::Text("Notes: %zu  |  Hits: %zu",
+                    timeline_->notes.size(),
+                    replay_ ? replay_->hits.size() : 0);
+    }
+
+    ImGui::SeparatorText("Developer");
+    ImGui::Checkbox("Show Developer Options", &show_dev_options);
+    if (show_dev_options) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f),
+                           "WARNING: These options are for advanced users only.");
+
+        if (timeline_ && replay_ && !replay_->hits.empty()) {
+            ImGui::Spacing();
+            ImGui::SeparatorText("Replay");
+            const char* fmt_str = (replay_->format == ReplayFormat::LR2REP) ? "LR2REP" : "BRD";
+            ImGui::Text("Format: %s", fmt_str);
+            if (replay_->has_random_info[player_idx_]) {
+                const char* mode_str = "OFF";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::Mirror)  mode_str = "MIRROR";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::Random)  mode_str = "RANDOM";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::SRandom) mode_str = "S-RANDOM";
+                if (replay_->random_mode[player_idx_] == LR2RandomMode::RRandom) mode_str = "R-RANDOM";
+                ImGui::Text("Mode: %s", mode_str);
+                ImGui::Text("Seed: %d", replay_->random_seed);
+            }
+            int prev = player_idx_;
+            ImGui::RadioButton("P1", &player_idx_, 0); ImGui::SameLine();
+            ImGui::RadioButton("P2", &player_idx_, 1);
+            if (player_idx_ != prev && timeline_ && !replay_->hits.empty()) {
+                set_data(timeline_, replay_);
+            }
+        }
+
+        ImGui::Checkbox("##HashVerify", &hash_verify_enabled);
+        ImGui::SameLine();
+        ImGui::Text("Hash Verification");
+        if (!hash_verify_status.empty()) {
+            bool ok = hash_verify_status == "OK";
+            ImGui::TextColored(ok ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f)
+                                  : ImVec4(1.0f, 0.3f, 0.2f, 1.0f),
+                               "  %s", hash_verify_status.c_str());
+        }
+
+        ImGui::Checkbox("Show Debug Overlay", &show_debug_overlay);
+
+        if (timeline_) {
+            int r = timeline_->rank;
+            if (r < 0) r = 0; if (r > 3) r = 3;
+            auto rank = static_cast<JudgeRank>(r);
+            const auto& w = JudgeProfile::get_window(judge_engine_.system(), rank);
+            ImGui::SeparatorText("Judge Config");
+            ImGui::Text("System: %s", judge_engine_.system() == JudgeSystem::LR2 ? "LR2" : "beatoraja");
+            ImGui::Text("Rank:   %s (%d)", JudgeProfile::rank_string(rank), r);
+            ImGui::Text("PG: %d ms  GR: %d ms  GD: %d ms", w.pg, w.gr, w.gd);
+            ImGui::Text("BD: %d ms  POOR: %d ms", w.bd, w.poor);
+        }
+    }
+}
+
+// 新增: 底部密度图 - 显示每个 measure 的 note 数量
+void ChartView::render_density_chart(ImDrawList* dl, const ImVec2& pos, const ImVec2& size) {
+    if (timeline_ && !timeline_->notes.empty()) {
+        tick_t t_end_tick = timeline_->tick_end();
+        if (t_end_tick > 0 && ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
+            ImVec2 mp = ImGui::GetMousePos();
+            float ml = 4.0f, mr = 4.0f;
+            float cw = size.x - ml - mr;
+            float rx = mp.x - pos.x - ml;
+            float p = std::max(0.0f, std::min(1.0f, rx / cw));
+            current_tick_ = static_cast<double>(p) * static_cast<double>(t_end_tick);
+            current_time_sec_ = timeline_->time_map.tick_to_second(
+                static_cast<tick_t>(current_tick_));
+        }
+    }
+
+    // 背景
+    dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                      IM_COL32(20, 20, 40, 255));
+
+    if (!timeline_ || timeline_->notes.empty()) {
+        dl->AddText(ImVec2(pos.x + 4, pos.y + 4), IM_COL32(120, 120, 160, 200),
+                    "Note Density");
+        return;
+    }
+
+    // 统计每个 measure 的 note 数量
+    tick_t t_end = timeline_->tick_end();
+    int num_measures = static_cast<int>(t_end / kMeasureTick) + 1;
+    if (num_measures <= 0) return;
+
+    std::vector<int> density(num_measures, 0);
+    for (const auto& n : timeline_->notes) {
+        int m = static_cast<int>(n.tick / kMeasureTick);
+        if (m >= 0 && m < num_measures) density[m]++;
+    }
+
+    int max_density = 1;
+    for (int d : density) if (d > max_density) max_density = d;
+
+    float margin_l = 4.0f;
+    float margin_r = 4.0f;
+    float margin_t = 14.0f;
+    float margin_b = 4.0f;
+    float chart_w = size.x - margin_l - margin_r;
+    float chart_h = size.y - margin_t - margin_b;
+    float bar_w = chart_w / num_measures;
+
+    // 标题
+    dl->AddText(ImVec2(pos.x + 4, pos.y + 2), IM_COL32(180, 180, 220, 200),
+                "Note Density");
+
+    // 绘制柱状图
+    for (int i = 0; i < num_measures; ++i) {
+        float bar_h = (static_cast<float>(density[i]) / max_density) * chart_h;
+        float bx = pos.x + margin_l + i * bar_w;
+        float by = pos.y + margin_t + chart_h - bar_h;
+
+        ImU32 col = IM_COL32(80, 160, 255, 160);
+        if (bar_w >= 2.0f) {
+            dl->AddRectFilled(ImVec2(bx, by),
+                              ImVec2(bx + bar_w - 0.5f, pos.y + margin_t + chart_h),
+                              col);
+        } else {
+            dl->AddLine(ImVec2(bx, by),
+                        ImVec2(bx, pos.y + margin_t + chart_h),
+                        col, 1.0f);
+        }
+    }
+
+    // 当前播放位置指示线
+    if (t_end > 0) {
+        float progress = static_cast<float>(current_tick_ / t_end);
+        float indicator_x = pos.x + margin_l + progress * chart_w;
+        dl->AddLine(ImVec2(indicator_x, pos.y + margin_t),
+                    ImVec2(indicator_x, pos.y + margin_t + chart_h),
+                    IM_COL32(255, 80, 80, 220), 1.5f);
+    }
+
+    ImVec2 mouse_pos = ImGui::GetMousePos();
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
+        float rel_x = mouse_pos.x - (pos.x + margin_l);
+
+        if (rel_x >= 0 && rel_x <= chart_w && timeline_) {
+            float progress = rel_x / chart_w;
+            current_tick_ = static_cast<double>(progress * t_end);
+            current_time_sec_ = timeline_->time_map.tick_to_second(static_cast<tick_t>(current_tick_));
+        }
+    }
+}
+
 void ChartView::render_analyzer() {
     if (is_playing_ && timeline_) {
         current_time_sec_ += ImGui::GetIO().DeltaTime * static_cast<double>(note_speed_);
@@ -523,7 +851,13 @@ void ChartView::render_analyzer() {
         }
     }
 
-    ImGui::BeginChild("ChartPanel", ImVec2(0, 0), true);
+    // 中栏: 谱面视图 (~80%) + 底部密度图 (~20%)
+    float total_h = ImGui::GetContentRegionAvail().y;
+    float button_row_h = 28.0f;
+    float density_h = total_h * 0.18f;
+    float chart_h = total_h - density_h - button_row_h - 8.0f;
+
+    ImGui::BeginChild("ChartPanel", ImVec2(0, chart_h), true);
     {
         handle_input();
 
@@ -592,6 +926,28 @@ void ChartView::render_analyzer() {
         }
     }
     ImGui::EndChild();
+
+    // 新增: 底部密度图
+    ImGui::BeginChild("DensityChart", ImVec2(0, density_h), true);
+    {
+        ImVec2 dpos  = ImGui::GetWindowPos();
+        ImVec2 dsize = ImGui::GetWindowSize();
+        ImDrawList* ddl = ImGui::GetWindowDrawList();
+        render_density_chart(ddl, dpos, dsize);
+
+    }
+    ImGui::EndChild();
+
+    {
+        float avail_w = ImGui::GetContentRegionAvail().x;
+        float btn_w = 60.0f;
+        float indent = (avail_w - btn_w) * 0.5f;
+        if (indent > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+
+        if (ImGui::Button(is_playing_ ? "||" : ">", ImVec2(btn_w, 0))) {
+            is_playing_ = !is_playing_;
+        }
+    }
 }
 
 } // namespace bmv
