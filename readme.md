@@ -58,42 +58,6 @@ cmake --build build --config Debug
 .\build\Release\bmv.exe testfiles\anata_g24.bme out.png --replay testfiles\eeff3a9a...lr2rep
 ```
 
-
-## 回放解析架构
-
-### 三层模型
-回放解析采用三层流水线设计：
-
-1. **文件读取层**（`brd_parser.cpp` / `lr2rep_parser.cpp`）
-   - 负责读取原始文件、解压缩、格式解码
-   - BRD: GZIP → JSON → base64 → GZIP → 9字节帧流
-   - LR2REP: 直接读取 12字节 LE 记录流
-   - 输出统一的 `RawInputEvent` 列表（press/release 分离，不配对）
-
-2. **RawInputEvent 转换层**（`replay_adapter.cpp`，临时适配层）
-   - 将 `RawInputEvent` 转换为 legacy `ReplayData`
-   - BRD 路径：状态机按 lane 配对 press/release → `ReplayHit`
-   - LR2 路径：每个事件直接转为一个 `ReplayHit`
-   - 通过 `TimeMap` 将微秒时间戳转换为 tick
-
-3. **TimeMap 映射层**（`judgement_engine.cpp`）
-   - `compute_lane_mappings()` 在此处执行 shuffle/random 映射
-   - 将显示 lane 映射到 BMS 通道 lane
-
-### ReplayInput vs ReplayData
-- **`ReplayInput`**：新接口，包含 `RawInputEvent` + 元数据（`Lr2Meta`/`BrdMeta`），不依赖 `TimeMap`
-- **`ReplayData`**：旧接口，包含 `ReplayHit`（已配对、已转换 tick），依赖 `TimeMap`
-- 下游消费者未来应直接使用 `ReplayInput`，`replay_adapter` 为 Phase 3 删除候选
-
-### 格式差异统一方式
-- BRD 和 LR2REP 的事件模型不同（BRD 为 base64+GZIP 压缩帧流，LR2 为原始二进制记录），但统一输出为 `RawInputEvent`
-- 物理 keycode → 统一显示 lane 的映射在各自 parser 内完成
-
-### Lane 坐标系
-- `RawInputEvent.lane` 和 `ReplayHit.lane` 均使用统一显示 lane
-- **0 = scratch（转盘），1-7 = 按键（K1-K7）**
-- shuffle/random 映射在 `JudgementEngine::compute_lane_mappings()` 中执行
-
 ## 开发待办
 
 ### 高优先级
@@ -102,18 +66,19 @@ cmake --build build --config Debug
 - [ ] 详细的判定分析和统计（FAST/SLOW 分布、mean/stddev 时序偏移可视化、逐 note 判定详情面板）
 
 ### 中优先级
-- [ ] UI 大修（Controls Panel 重构已完成，剩余范围待定）+ BMS 注释语法支持 (`//`, `;`, `/* */`)
+- [x] UI 大修
+- [x] BMS 注释语法支持 (`//`, `;`, `/* */`)
 - [ ] 元数据显示：`#SUBTITLE`, `#SUBARTIST`, `#COMMENT`, `#DIFFICULTY`
 - [ ] 字体重绘（添加完整字母支持，修复 BPM/STOP 标签显示不完整）
 - [ ] 支持其他程序传参调用 + replay 目录内 hash 筛选
-- [ ] `#BASE` 62 进制支持（修复 62 进制谱面 `#WAV/#BPM` 索引解析错误）
-- [ ] `.bmson` 解析支持 (`BmsonParser`)
+- [ ] `#BASE` 62 进制支持
+- [ ] `.bmson` 解析支持 
 - [ ] 5K / 9L / 14K BMS 布局适配（当前仅支持 7K）
-- [ ] FFmpeg 管道视频导出（功能已完成，文档同步）
-- [ ] SHA256/MD5 哈希校验（功能已完成，文档同步）
+- [ ] FFmpeg 管道视频导出
+- [ ] SHA256/MD5 哈希校验
 
 ### 低优先级
-- [ ] 谱面波形图
+- [x] 谱面波形图
 - [ ] `#LNTYPE 1` 通道支持 (0x51-0x69)
 - [ ] 地雷通道 (D1-D9, E1-E9) 可视化
 

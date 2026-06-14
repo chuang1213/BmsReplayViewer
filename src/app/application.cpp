@@ -189,6 +189,11 @@ void Application::load_recent_files() {
                 chart_view_.set_replay_display_mode(cfg["replay_display_mode"].get<int>());
             if (cfg.contains("auto_follow_playback"))
                 chart_view_.set_auto_follow_playback(cfg["auto_follow_playback"].get<bool>());
+            // 新增: 加载 F/S 显示和 chart_speed 配置
+            if (cfg.contains("show_fs_labels"))
+                chart_view_.set_show_fs_labels(cfg["show_fs_labels"].get<bool>());
+            if (cfg.contains("chart_speed"))
+                chart_view_.set_chart_speed(cfg["chart_speed"].get<float>());
         }
     } catch (...) {}
 }
@@ -203,6 +208,9 @@ void Application::save_recent_files() {
     cfg["scroll_distance"]      = chart_view_.scroll_distance();
     cfg["replay_display_mode"]  = chart_view_.replay_display_mode_int();
     cfg["auto_follow_playback"] = chart_view_.auto_follow_playback();
+    // 新增: 保存 F/S 显示和 chart_speed 配置
+    cfg["show_fs_labels"]       = chart_view_.show_fs_labels();
+    cfg["chart_speed"]          = chart_view_.chart_speed();
     j["config"] = cfg;
 
     std::ofstream f(get_recent_path());
@@ -266,12 +274,20 @@ void Application::render_analyzer_tab() {
     }
 
     float avail = ImGui::GetContentRegionAvail().x;
-    ImGui::BeginChild("##ChartPanel", ImVec2(avail * 0.58f, 0), true);
+    // 三栏布局: 左栏(~25%) 分析面板 | 中栏(~50%) 谱面视图 | 右栏(~25%) 设置面板
+    float left_w  = avail * 0.25f;
+    float right_w = avail * 0.25f;
+
+    ImGui::BeginChild("##AnalysisPanel", ImVec2(left_w, 0), true);
+    chart_view_.render_analysis_panel();
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##ChartPanel", ImVec2(avail - left_w - right_w, 0), true);
     chart_view_.render_analyzer();
     ImGui::EndChild();
     ImGui::SameLine();
-    ImGui::BeginChild("##ControlsPanel", ImVec2(0, 0), true);
-    chart_view_.render_controls_child();
+    ImGui::BeginChild("##SettingsPanel", ImVec2(0, 0), true);
+    chart_view_.render_settings_panel();
     ImGui::EndChild();
 }
 
@@ -393,7 +409,7 @@ int Application::run() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    window_ = glfwCreateWindow(1280, 720, "BMV - BMS Visualizer",
+    window_ = glfwCreateWindow(1280, 900, "BMS Replay Visualizer",
                                nullptr, nullptr);
     if (!window_) { glfwTerminate(); return 1; }
     glfwMakeContextCurrent(window_);
