@@ -45,20 +45,20 @@ static std::vector<uint8_t> brd_unwrap_json(const std::vector<uint8_t>& raw,
         return {};
     }
 
-    // TODO: Phase X - BRD version compatibility
-    // [位置保留] 旧版本 BRD 格式检测与分支逻辑
-    // 根据 JSON 结构/版本号判断，调用不同的解析流程
-    // 当前: 仅支持最新版本
-    // Version detection stub:
-    // int brd_version = detect_brd_version(j);
-    // if (brd_version < 0) {
-    // #ifdef BMV_DEBUG
-    //     std::fprintf(stderr, "[BrdParser] Unknown BRD version, attempting latest format...\n");
-    // #endif
-    // }
-
     out_json = std::move(j);
     return json_bytes;
+}
+
+// Detect BRD format version by checking JSON field names.
+// Returns: "new" (keyinput), "old" (keylog), "unknown"
+static const char* brd_detect_version(const nlohmann::json& j) {
+    if (j.contains("keyinput") && j["keyinput"].is_string()) {
+        return "new";
+    }
+    if (j.contains("keylog") && j["keylog"].is_array()) {
+        return "old";
+    }
+    return "unknown";
 }
 
 // Parse 9-byte key frames from binary stream.
@@ -103,6 +103,44 @@ static std::vector<RawInputEvent> brd_decode_frames(const std::vector<uint8_t>& 
     return events;
 }
 
+// Parse keylog array from legacy BRD format.
+// Each element: {"presstime": int64, "keycode": int 0-7, "pressed": bool (optional)}
+// keycode: 0-6 = keys (lane 1-7), 7 = scratch (lane 0)
+static std::vector<RawInputEvent> brd_decode_keylog(const nlohmann::json& keylog,
+                                                      int64_t& out_duration_us) {
+    std::vector<RawInputEvent> events;
+
+    for (const auto& entry : keylog) {
+        if (!entry.is_object()) continue;
+
+        if (!entry.contains("presstime") || !entry["presstime"].is_number_integer()) {
+            continue;
+        }
+        int64_t ts = entry["presstime"].get<int64_t>();
+
+        if (!entry.contains("keycode") || !entry["keycode"].is_number_integer()) {
+            continue;
+        }
+        int keycode = entry["keycode"].get<int>();
+        if (keycode < 0 || keycode > 7) continue;
+
+        bool pressed = false;
+        if (entry.contains("pressed") && entry["pressed"].is_boolean()) {
+            pressed = entry["pressed"].get<bool>();
+        }
+
+        // keycode -> lane mapping (same as new format)
+        uint8_t lane;
+        if (keycode == 7)      lane = 0;         // Scratch -> lane 0
+        else /* keycode 0-6 */ lane = static_cast<uint8_t>(keycode + 1); // K0-K6 -> lane 1-7
+
+        events.push_back({ts, lane, pressed});
+    }
+
+    if (!events.empty()) out_duration_us = events.back().time_us;
+    return events;
+}
+
 // Extract BRD-specific metadata (shuffle pattern) from JSON.
 static BrdMeta brd_extract_meta(const nlohmann::json& j) {
     BrdMeta meta;
@@ -139,26 +177,37 @@ ReplayInput BrdParser::parse_replay_input(const std::string& filepath) {
 
     input.brd = brd_extract_meta(j);
 
-    if (!j.contains("keyinput") || !j["keyinput"].is_string()) {
+    const char* version = brd_detect_version(j);
+
+    if (std::strcmp(version, "new") == 0) {
+        // New format: keyinput (base64 + GZIP)
+        std::string keyinput = j["keyinput"].get<std::string>();
+
+        auto decoded = base64::decode(keyinput);
+        if (decoded.empty()) {
 #ifdef BMV_DEBUG
-        std::fprintf(stderr, "[BrdParser] missing 'keyinput' field\n");
+            std::fprintf(stderr, "[BrdParser] base64 decode produced no data\n");
+#endif
+            return input;
+        }
+
+        auto bin = gzip_decompress(decoded.data(), decoded.size());
+        if (bin.empty()) return input;
+
+        input.events = brd_decode_frames(bin, j, input.duration_us);
+
+    } else if (std::strcmp(version, "old") == 0) {
+        // Legacy format: keylog (JSON array)
+        const auto& keylog = j["keylog"];
+        input.events = brd_decode_keylog(keylog, input.duration_us);
+
+    } else {
+#ifdef BMV_DEBUG
+        std::fprintf(stderr, "[BrdParser] unknown BRD format: missing keyinput or keylog\n");
 #endif
         return input;
     }
-    std::string keyinput = j["keyinput"].get<std::string>();
 
-    auto decoded = base64::decode(keyinput);
-    if (decoded.empty()) {
-#ifdef BMV_DEBUG
-        std::fprintf(stderr, "[BrdParser] base64 decode produced no data\n");
-#endif
-        return input;
-    }
-
-    auto bin = gzip_decompress(decoded.data(), decoded.size());
-    if (bin.empty()) return input;
-
-    input.events = brd_decode_frames(bin, j, input.duration_us);
     return input;
 }
 
