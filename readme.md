@@ -66,7 +66,7 @@ cmake --build build --config Debug
   - [x] 阶段1: 类型定义与随机算法纯函数
   - [x] 阶段2: BRD 解析器（新旧版本）
   - [x] 阶段3: LR2REP 解析器
-  - [ ] 阶段4: 工厂函数 `parse_replay`
+  - [x] 阶段4: 工厂函数 `parse_replay`
   - [ ] 阶段5: 适配层 `unified_to_replay_data`
   - [ ] 阶段6: 集成测试
 - [ ] 详细的判定分析和统计（FAST/SLOW 分布、mean/stddev 时序偏移可视化、逐 note 判定详情面板）
