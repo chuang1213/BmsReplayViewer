@@ -8,7 +8,7 @@ void render_about_panel() {
     ImGui::Separator();
     ImGui::Spacing();
 
-    ImGui::Text("Version: 0.3.3");
+    ImGui::Text("Version: 0.3.3-alpha");
     ImGui::Text("Build:   " __DATE__);
     ImGui::Text("By Chuang1227(chuang1227@foxmail.com)");
     ImGui::Spacing();

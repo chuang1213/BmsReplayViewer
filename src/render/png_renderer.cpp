@@ -179,11 +179,11 @@ bool PngRenderer::render(const Timeline& timeline,
     // Build lane shuffle table from replay data (chart notes get shuffled; replay hits stay physical)
     for (int i = 0; i < 8; ++i) bms_lane_to_display_[i] = i;  // default 1:1
     if (replay && replay->has_shuffle) {
+        // shuffle_pattern 已经是统一格式：shuffle_pattern[display_lane] = bms_lane
+        // 其中 0 = scratch, 1-7 = keys
         for (int i = 0; i < 8; ++i) {
-            int original_val = replay->shuffle_pattern[i];
-            int bms_lane = (original_val == 7) ? 0 : (original_val + 1);
-            int display_lane = (i == 7) ? 0 : (i + 1);
-            bms_lane_to_display_[bms_lane] = display_lane;
+            int bms_lane = replay->shuffle_pattern[i];
+            bms_lane_to_display_[bms_lane] = i;
         }
     }
     if (replay && replay->format == ReplayFormat::LR2REP && replay->has_random_info[0]) {

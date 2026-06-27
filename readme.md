@@ -15,14 +15,13 @@ BMV (BMS Visualizer) 是一款 BMS 节奏游戏回放分析工具。导入谱面
 （这是我的第一个开源项目，有很多不到位的地方还请多指教。）
 
 ## 现有缺陷
-- 旧版本 oraja 回放不支持（仅支持 0.8.7+）
+- 旧版本 oraja 回放不完全支持（仅支持 0.8.7+）
 - .bmson 格式不知道支不支持
 - 不支持 BMS 注释语法（//、;、/* */），含注释的谱面可能解析失败
 - Channel 03 HEX BPM 丢弃了负值，不支持逆向滚动谱面
 - #BASE 62 进制未支持，使用 62 进制的谱面 #WAV/#BPM 索引会解析错误
 - 仅支持7k
 - 内嵌像素字体缺少字母，BPM/STOP 标签无法显示完整
-- 分开拖谱和回放有点麻烦
 
 ## 构建与使用
 
@@ -62,8 +61,14 @@ cmake --build build --config Debug
 
 ### 高优先级
 - [ ] beatoraja 0.8.6 及以前版本的回放兼容（testfile 中需补充旧版 brd 样本）
-- [ ] Random 模块解耦（将 lane shuffle 算法从 replay 解析中分离，独立为 random/ 模块）
-- [x] 回放解析解耦重构（工厂1: 格式分派 + 工厂2: brd 版本分派 + 统一 ReplayData，详见 ADR-22）
+- [x] Random 模块解耦（将 lane shuffle 算法从 replay 解析中分离，独立为 random/ 模块）
+- [ ] 回放解析解耦重构（工厂1: 格式分派 + 工厂2: brd 版本分派 + 统一 ReplayData，详见 ADR-22）
+  - [x] 阶段1: 类型定义与随机算法纯函数
+  - [x] 阶段2: BRD 解析器（新旧版本）
+  - [x] 阶段3: LR2REP 解析器
+  - [ ] 阶段4: 工厂函数 `parse_replay`
+  - [ ] 阶段5: 适配层 `unified_to_replay_data`
+  - [ ] 阶段6: 集成测试
 - [ ] 详细的判定分析和统计（FAST/SLOW 分布、mean/stddev 时序偏移可视化、逐 note 判定详情面板）
 
 ### 中优先级

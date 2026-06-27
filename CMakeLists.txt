@@ -39,6 +39,7 @@ add_executable(bmv
     src/format/bms_parser.cpp
     src/render/png_renderer.cpp
     src/replay/brd_parser.cpp
+    src/replay/java_random.cpp
     src/replay/lr2rep_parser.cpp
     src/replay/lr2_random.cpp
     src/replay/replay_adapter.cpp
@@ -87,4 +88,114 @@ if(MSVC)
     target_compile_definitions(bmv PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(bmv PRIVATE -Wall -Wextra)
+endif()
+
+# --- Test executable for BRD random algorithm ---
+add_executable(test_brd_random
+    test_brd_random.cpp
+    src/replay/java_random.cpp
+)
+
+target_include_directories(test_brd_random PRIVATE src)
+
+if(MSVC)
+    target_compile_options(test_brd_random PRIVATE /W4 /utf-8)
+    target_compile_definitions(test_brd_random PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_brd_random PRIVATE -Wall -Wextra)
+endif()
+
+# --- Test executable for unified random interface ---
+add_executable(test_unified_random
+    test_unified_random.cpp
+    src/replay/unified/random.cpp
+    src/replay/java_random.cpp
+    src/replay/lr2_random.cpp
+)
+
+target_include_directories(test_unified_random PRIVATE src)
+
+if(MSVC)
+    target_compile_options(test_unified_random PRIVATE /W4 /utf-8)
+    target_compile_definitions(test_unified_random PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_unified_random PRIVATE -Wall -Wextra)
+endif()
+
+# --- Test executable for unified BRD parser ---
+add_executable(test_brd_parser
+    test_brd_parser.cpp
+    src/replay/unified/random.cpp
+    src/replay/unified/brd_parser.cpp
+    src/replay/java_random.cpp
+    src/replay/lr2_random.cpp
+    libs/miniz/miniz_tinfl.c
+)
+
+target_include_directories(test_brd_parser PRIVATE
+    src
+    libs/miniz
+    libs/nlohmann
+    libs/picosha2
+    libs/md5
+)
+
+if(MSVC)
+    target_compile_options(test_brd_parser PRIVATE /W4 /utf-8)
+    target_compile_definitions(test_brd_parser PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_brd_parser PRIVATE -Wall -Wextra)
+endif()
+
+# --- Test executable for unified LR2 parser ---
+add_executable(test_lr2_parser
+    test_lr2_parser.cpp
+    src/replay/unified/random.cpp
+    src/replay/unified/lr2_parser.cpp
+    src/replay/lr2_random.cpp
+    src/replay/java_random.cpp
+    src/replay/lr2rep_parser.cpp
+    src/replay/replay_adapter.cpp
+    src/core/time_map.cpp
+)
+
+target_include_directories(test_lr2_parser PRIVATE
+    src
+    libs/nlohmann
+    libs/picosha2
+    libs/md5
+)
+
+if(MSVC)
+    target_compile_options(test_lr2_parser PRIVATE /W4 /utf-8)
+    target_compile_definitions(test_lr2_parser PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_lr2_parser PRIVATE -Wall -Wextra)
+endif()
+
+# --- Test executable for unified parser factory ---
+add_executable(test_parser
+    test_parser.cpp
+    src/replay/unified/parser.cpp
+    src/replay/unified/random.cpp
+    src/replay/unified/brd_parser.cpp
+    src/replay/unified/lr2_parser.cpp
+    src/replay/java_random.cpp
+    src/replay/lr2_random.cpp
+    libs/miniz/miniz_tinfl.c
+)
+
+target_include_directories(test_parser PRIVATE
+    src
+    libs/miniz
+    libs/nlohmann
+    libs/picosha2
+    libs/md5
+)
+
+if(MSVC)
+    target_compile_options(test_parser PRIVATE /W4 /utf-8)
+    target_compile_definitions(test_parser PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_parser PRIVATE -Wall -Wextra)
 endif()

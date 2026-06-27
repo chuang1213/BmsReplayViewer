@@ -1,5 +1,6 @@
 #include "brd_parser.h"
 #include "replay_adapter.h"
+#include "java_random.h"
 #include "base64.h"
 #include "gzip.h"
 #include "json.hpp"
@@ -148,12 +149,34 @@ static BrdMeta brd_extract_meta(const nlohmann::json& j) {
     if (j.contains("laneShufflePattern") && j["laneShufflePattern"].is_array()) {
         auto& outer = j["laneShufflePattern"];
         if (!outer.empty() && outer[0].is_array() && outer[0].size() == 8) {
+            // 新 BRD 的 laneShufflePattern 是 beatoraja 格式，需要转换为统一格式
+            int beatoraja_pattern[8];
             for (int i = 0; i < 8; ++i) {
                 if (outer[0][i].is_number_integer()) {
-                    meta.shuffle_pattern[i] = outer[0][i].get<int>();
-                    meta.has_shuffle = true;
+                    beatoraja_pattern[i] = outer[0][i].get<int>();
+                } else {
+                    beatoraja_pattern[i] = i;
                 }
             }
+            
+            // 坐标转换：beatoraja → 统一格式
+            for (int display_bev = 0; display_bev < 8; ++display_bev) {
+                int bms_bev = beatoraja_pattern[display_bev];
+                int display_our = (display_bev == 7) ? 0 : display_bev + 1;
+                int bms_our = (bms_bev == 7) ? 0 : bms_bev + 1;
+                meta.shuffle_pattern[display_our] = bms_our;
+            }
+            meta.has_shuffle = true;
+        }
+    } else if (j.contains("randomoption") && j.contains("randomoptionseed")) {
+        // 旧 BRD 没有 laneShufflePattern，但有 seed，需要计算
+        int random_option = j["randomoption"].get<int>();
+        int64_t seed = j["randomoptionseed"].get<int64_t>();
+        
+        // 只有 random_option == 2 或 9 时才需要计算 shuffle
+        if (random_option == 2 || random_option == 9) {
+            build_brd_random_pattern(random_option, seed, meta.shuffle_pattern);
+            meta.has_shuffle = true;
         }
     }
 
