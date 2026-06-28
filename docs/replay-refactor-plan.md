@@ -229,21 +229,26 @@ struct ParseError {
 - `error=nullptr` 安全测试
 - LR2REP 缺失文件测试
 
-### 阶段 5: 适配层
+### 阶段 5: 适配层 ✅ 已完成
 
 **目标**：实现 `unified_to_replay_data` 适配函数，让 Application 层可以继续用 `ReplayData`
 
-**任务**：
-1. 创建 `src/replay/unified/adapter.h/cpp`
-2. 实现 `ReplayData unified_to_replay_data(const UnifiedReplay& replay, const TimeMap& time_map)`
-3. 内部逻辑：
-   - press/release 事件配对成 hit（BRD 风格）
-   - 填充 `ReplayData` 的字段
-4. 为适配层写单元测试
+**已完成任务**：
+1. ✅ 创建 `src/replay/unified/adapter.h/cpp`
+2. ✅ 实现 `ReplayData unified_to_replay_data(const UnifiedReplay& replay, const TimeMap& time_map, ReplayFormat format)`
+3. ✅ 内部逻辑：
+   - BRD: 状态机配对 press/release → ReplayHit，处理 EOF unmatched
+   - LR2: 直接转换，填充 random_mode/seed/judgements
+4. ✅ 创建单元测试 `test_adapter.cpp`，7 个测试用例全部通过
 
-**验收标准**：
-- 适配层单元测试通过
-- 输出的 `ReplayData` 与旧版本一致（用相同的测试文件验证）
+**测试结果**：
+- 真实 BRD 新版: 2256 hits ✓
+- 真实 BRD 旧版: 1867 hits ✓
+- 真实 LR2: 4545 hits ✓
+- 合成 BRD 配对测试
+- 合成 BRD EOF unmatched 测试
+- 合成 LR2 元数据测试
+- 新旧端到端等价性测试
 
 ### 阶段 6: 集成测试
 

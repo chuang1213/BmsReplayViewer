@@ -199,3 +199,35 @@ if(MSVC)
 else()
     target_compile_options(test_parser PRIVATE -Wall -Wextra)
 endif()
+
+# --- Test executable for unified → legacy adapter ---
+add_executable(test_adapter
+    test_adapter.cpp
+    src/replay/unified/adapter.cpp
+    src/replay/unified/parser.cpp
+    src/replay/unified/random.cpp
+    src/replay/unified/brd_parser.cpp
+    src/replay/unified/lr2_parser.cpp
+    src/replay/java_random.cpp
+    src/replay/lr2_random.cpp
+    src/replay/replay_adapter.cpp
+    src/replay/brd_parser.cpp
+    src/replay/lr2rep_parser.cpp
+    src/core/time_map.cpp
+    libs/miniz/miniz_tinfl.c
+)
+
+target_include_directories(test_adapter PRIVATE
+    src
+    libs/miniz
+    libs/nlohmann
+    libs/picosha2
+    libs/md5
+)
+
+if(MSVC)
+    target_compile_options(test_adapter PRIVATE /W4 /utf-8)
+    target_compile_definitions(test_adapter PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(test_adapter PRIVATE -Wall -Wextra)
+endif()
