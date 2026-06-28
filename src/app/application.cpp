@@ -1,5 +1,7 @@
 #include "application.h"
 #include "format/bms_parser.h"
+#include "util/encoding.h"
+#include "util/fs_util.h"
 #include "replay/replay_data.h"
 #include "replay/raw_input_event.h"
 #include "replay/replay_adapter.h"
@@ -14,7 +16,6 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "GLFW/glfw3.h"
-#include "assets/0xproto_font.h"
 #include <filesystem>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include "GLFW/glfw3native.h"
@@ -46,17 +47,36 @@ static void glfw_error_callback(int error, const char* desc) {
 std::string Application::open_file_dialog(const char* filter_pattern,
                                            const char* title) {
 #ifdef _WIN32
-    OPENFILENAMEA ofn = {};
-    char buf[MAX_PATH] = {};
+    // 使用 GetOpenFileNameW 获取 UTF-16 路径（避免日文路径在 ANSI 代码页丢失）
+    OPENFILENAMEW ofn = {};
+    wchar_t buf[MAX_PATH] = {};
+
+    // 将 ASCII filter 转为宽字符
+    wchar_t wfilter[512] = {};
+    int flen = 0;
+    while (filter_pattern[flen]) {
+        wfilter[flen] = static_cast<wchar_t>(static_cast<unsigned char>(filter_pattern[flen]));
+        ++flen;
+    }
+    wfilter[flen] = L'\0'; // 第二个 null（\0\0 终止）
+
+    wchar_t wtitle[256] = {};
+    int tlen = 0;
+    while (title[tlen]) {
+        wtitle[tlen] = static_cast<wchar_t>(static_cast<unsigned char>(title[tlen]));
+        ++tlen;
+    }
+
     ofn.lStructSize  = sizeof(ofn);
     ofn.hwndOwner    = glfwGetWin32Window(window_);
-    ofn.lpstrFilter  = filter_pattern;
+    ofn.lpstrFilter  = wfilter;
     ofn.lpstrFile    = buf;
     ofn.nMaxFile     = MAX_PATH;
-    ofn.lpstrTitle   = title;
+    ofn.lpstrTitle   = wtitle;
     ofn.Flags        = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY |
                        OFN_PATHMUSTEXIST;
-    if (GetOpenFileNameA(&ofn)) return std::string(buf);
+    if (GetOpenFileNameW(&ofn))
+        return wstring_to_utf8(std::wstring(buf));
 #elif defined(__linux__)
     char buf[2048];
     std::snprintf(buf, sizeof(buf),
@@ -100,12 +120,8 @@ void Application::load_chart_file(const std::string& path) {
                 path.c_str(), timeline_.notes.size(), timeline_.measures.size());
     reload_chart_view();
 
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (f) {
-        size_t sz = static_cast<size_t>(f.tellg());
-        f.seekg(0, std::ios::beg);
-        std::vector<uint8_t> buf(sz);
-        f.read(reinterpret_cast<char*>(buf.data()), sz);
+    auto buf = read_file_binary(path);
+    if (!buf.empty()) {
         bms_sha256_ = picosha2::hash256_hex_string(buf);
         bms_md5_ = md5::hash_hex_string(buf);
         std::printf("[Application] chart SHA256: %s\n", bms_sha256_.c_str());
@@ -138,8 +154,8 @@ void Application::load_replay_file(const std::string& path) {
 
     // Hash 校验: 文件名需包含对应 chart hash
     if (chart_view_.hash_verify_enabled && !bms_sha256_.empty()) {
-        std::filesystem::path rp(path);
-        std::string stem = rp.stem().string();
+        std::filesystem::path rp = to_path(path);
+        std::string stem = rp.stem().u8string();
         bool ok = false;
         if (fmt == ReplayFormat::LR2REP)
             ok = stem.find(bms_md5_) != std::string::npos;
@@ -191,14 +207,15 @@ static std::string get_recent_path() {
 #endif
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    return (dir / "recent_files.json").string();
+    // u8string() 返回 UTF-8 编码，与 fs_util 的 to_path() 期望一致
+    return (dir / "recent_files.json").u8string();
 }
 
 void Application::load_recent_files() {
-    std::ifstream f(get_recent_path());
-    if (!f.is_open()) return;
+    std::string text = read_file_text_raw(get_recent_path());
+    if (text.empty()) return;
     try {
-        auto j = nlohmann::json::parse(f);
+        auto j = nlohmann::json::parse(text);
         if (j.contains("charts") && j["charts"].is_array()) {
             for (auto& e : j["charts"])
                 if (e.is_string()) recent_.charts.push_back(e.get<std::string>());
@@ -241,8 +258,7 @@ void Application::save_recent_files() {
     cfg["chart_speed"]          = chart_view_.chart_speed();
     j["config"] = cfg;
 
-    std::ofstream f(get_recent_path());
-    if (f.is_open()) f << j.dump(2);
+    write_file_text(get_recent_path(), j.dump(2));
 }
 
 void Application::add_recent_chart(const std::string& path) {
@@ -454,23 +470,42 @@ int Application::run() {
     io.IniFilename = nullptr;
     ImGui::StyleColorsDark();
 
+    // 字体策略：保留 ImGui 默认字体 (ProggyClean, 13px) 处理全部 ASCII UI 文本。
+    // 另加载系统 CJK 字体作为独立 ImFont，仅供元数据栏显示日文 Title/Artist。
+    {
+        namespace fs = std::filesystem;
+#ifdef _WIN32
+        static const char* candidates[] = {
+            "C:/Windows/Fonts/msgothic.ttc",
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/simsun.ttc",
+        };
+#else
+        static const char* candidates[] = {
+            "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        };
+#endif
+        for (const char* p : candidates) {
+            if (fs::exists(p)) {
+                cjk_font_ = io.Fonts->AddFontFromFileTTF(p, 15.0f, nullptr,
+                    io.Fonts->GetGlyphRangesJapanese());
+                break;
+            }
+        }
+        chart_view_.set_cjk_font(cjk_font_);
+    }
+
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init("#version 150");
 
-    // 嵌入 0xProto 字体并全局使用
-    {
-        ImFontConfig cfg;
-        cfg.OversampleH = 2;
-        cfg.OversampleV = 2;
-        ImFont* font = io.Fonts->AddFontFromMemoryTTF(
-            (void*)bmv_proto_font_source,
-            (int)bmv_proto_font_source_len,
-            16.0f, &cfg, nullptr);
-        IM_ASSERT(font != nullptr);
-        io.FontDefault = font;
-    }
-
     load_recent_files();
+
+    // 若通过 --gui <file> 指定了预加载文件，在 GUI 初始化后自动加载
+    if (!preload_chart_.empty()) {
+        load_chart_file(preload_chart_);
+    }
 
     active_tab_ = 0;
     chart_loaded_ = false;

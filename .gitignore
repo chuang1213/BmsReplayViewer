@@ -1,2 +1,40 @@
+# --- 构建输出 ---
 build/
+[Bb]in/
+[Oo]bj/
+
+# --- IDE / 编辑器 ---
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
 *.lnk
+*.swp
+*~
+
+# --- AI 工具残留 ---
+.aider*
+.hermes/
+.codebuddy/
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- 字体源文件（已嵌入或用系统字体，无需分发） ---
+*.ttf
+*.ttc
+*.otf
+
+# --- 临时测试输出 ---
+test_out.png
+_test*.png
+_test*.txt
+*_gui_*.txt
+
+# --- OS 残留 ---
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,5 +1,7 @@
 #include "bms_parser.h"
-#include <fstream>
+#include "util/encoding.h"
+#include "util/fs_util.h"
+#include <sstream>
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
@@ -73,16 +75,22 @@ RawChartData BmsParser::parse(const std::string& filepath)
     RawChartData chart;
     merged_channels_.clear();
 
-    std::ifstream file(filepath);
-    if (!file.is_open()) {
-        std::fprintf(stderr, "Error: cannot open file '%s'\n", filepath.c_str());
+    // 以二进制模式读取并自动检测编码，统一转换为 UTF-8
+    // （日文 BMS 文件通常为 Shift-JIS / CP932 编码）
+    std::string content = read_file_as_utf8(filepath);
+    if (content.empty()) {
+        // 区分"文件不存在"与"空文件"：用 file_size 探测
+        if (file_size(filepath) < 0) {
+            std::fprintf(stderr, "Error: cannot open file '%s'\n", filepath.c_str());
+        }
         return chart;
     }
 
+    std::istringstream ss(content);
     std::string line;
     int line_num = 0;
 
-    while (std::getline(file, line)) {
+    while (std::getline(ss, line)) {
         line_num++;
 
         if (!line.empty() && line.back() == '\r') line.pop_back();

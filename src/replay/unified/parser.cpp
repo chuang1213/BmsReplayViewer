@@ -3,13 +3,13 @@
 #include "lr2_parser.h"
 
 #include "../gzip.h"
+#include "../../util/fs_util.h"
 
 #include <json.hpp>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
-#include <fstream>
 #include <utility>
 #include <vector>
 
@@ -43,21 +43,9 @@ void set_error(ParseError* error, const std::string& file_path,
     error->context   = std::move(context);
 }
 
-// Read whole file as raw bytes.
+// Read whole file as raw bytes (cross-platform path encoding via fs_util).
 std::vector<uint8_t> read_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f) return {};
-    const std::streamsize size = f.tellg();
-    if (size < 0) return {};
-    f.seekg(0, std::ios::beg);
-    std::vector<uint8_t> data(static_cast<size_t>(size));
-    if (size > 0) {
-        f.read(reinterpret_cast<char*>(data.data()), size);
-        if (static_cast<std::streamsize>(data.size()) != f.gcount()) {
-            return {};
-        }
-    }
-    return data;
+    return read_file_binary(path);
 }
 
 // Forward + tag the sub-parser's ParseError with the originating file_path.

@@ -18,6 +18,5 @@ private:
 };
 
 void build_random_lane_pattern(int seed, int L, int display_to_bms[8], int bms_to_display[8]);
-void test_lr2_random();
 
 } // namespace bmv

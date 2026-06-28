@@ -74,12 +74,15 @@ bool    show_dev_options    = false;
         chart_md5_    = md5;
     }
 
+    void set_cjk_font(ImFont* f) { cjk_font_ = f; }
+
 private:
 const Timeline* timeline_ = nullptr;
     const ReplayData* replay_ = nullptr;
 
     std::string chart_sha256_;
     std::string chart_md5_;
+    ImFont*     cjk_font_ = nullptr;  // 元数据栏日文 Title/Artist 显示用
 
     JudgementEngine judge_engine_;
 

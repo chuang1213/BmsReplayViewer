@@ -1,5 +1,6 @@
 #include "video_export.h"
 #include "render/core_renderer.h"
+#include "util/fs_util.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -211,7 +212,14 @@ void VideoExporter::start_export(const ExportConfig& cfg,
         "-c:v libx264 -preset fast -crf 18 \"%s\"",
         cfg.width, cfg.height, cfg.fps, cfg.output_path);
 
+#ifdef _WIN32
+    // Windows: _popen 走 ANSI 代码页，非 ASCII 输出路径会失败。
+    // 改用 _wpopen + 宽字符命令串，正确处理日文/中文输出路径。
+    std::wstring wcmd = bmv::utf8_to_wstring(cmd);
+    pipe_ = _wpopen(wcmd.c_str(), L"wb");
+#else
     pipe_ = _popen(cmd, "wb");
+#endif
     if (!pipe_) {
         status_msg_ = "Failed to launch ffmpeg. Is it installed?";
         exporting_  = false;

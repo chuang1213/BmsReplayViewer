@@ -4,8 +4,8 @@
 #include "base64.h"
 #include "gzip.h"
 #include "json.hpp"
+#include "util/fs_util.h"
 
-#include <fstream>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -21,13 +21,7 @@ static std::vector<uint8_t> gzip_decompress(const void* data, size_t size) {
 // --- Sub-functions ---
 
 static std::vector<uint8_t> brd_read_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f) return {};
-    size_t size = static_cast<size_t>(f.tellg());
-    f.seekg(0, std::ios::beg);
-    std::vector<uint8_t> data(size);
-    f.read(reinterpret_cast<char*>(data.data()), size);
-    return data;
+    return bmv::read_file_binary(path);
 }
 
 // GZIP-decompress the raw .brd file and parse the inner JSON.

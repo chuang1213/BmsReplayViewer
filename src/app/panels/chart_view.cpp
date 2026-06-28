@@ -542,8 +542,11 @@ void ChartView::render_analysis_panel() {
     // 谱面元数据区块 (即使没有 replay 也显示)
     if (timeline_) {
         ImGui::SeparatorText("Chart Metadata");
+        // Title/Artist 可能含日文，切换到 CJK 字体（其他字段均为 ASCII/数字，用默认字体）
+        if (cjk_font_) ImGui::PushFont(cjk_font_);
         ImGui::TextWrapped("Title:  %s", timeline_->title.c_str());
         ImGui::TextWrapped("Artist: %s", timeline_->artist.c_str());
+        if (cjk_font_) ImGui::PopFont();
         ImGui::Text("BPM:    %.1f", timeline_->initial_bpm);
         if (!chart_sha256_.empty())
             ImGui::TextWrapped("SHA256: %s", chart_sha256_.c_str());
