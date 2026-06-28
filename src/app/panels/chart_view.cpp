@@ -250,6 +250,21 @@ void ChartView::draw_replay_hits(ImDrawList* dl, const ImVec2& win_pos,
     float ppt_f = static_cast<float>(pixels_per_tick_);
     float line_thk = std::max(1.0f, note_thickness_ / 5.0f);
 
+    // Release 标记: 菱形钻石。位置由调用者决定 (LR2 release hit 用 tick_start,
+    // BRD 有 hold 时长的 press hit 用 tick_end)。
+    static constexpr ImU32 COL_RELEASE = IM_COL32(170, 170, 220, 220);
+    auto draw_release_diamond = [&](int column, tick_t tick) {
+        if (tick < min_tick || tick > max_tick) return;
+        float cx = win_pos.x + chart_x0()
+                   + column * kLaneWidth + kLaneWidth * 0.5f;
+        float cy = screen_y(tick, win_pos, win_size);
+        float sz = std::max(2.5f, note_thickness_ / 3.0f);
+        dl->AddQuadFilled(
+            ImVec2(cx, cy - sz), ImVec2(cx + sz, cy),
+            ImVec2(cx, cy + sz), ImVec2(cx - sz, cy),
+            COL_RELEASE);
+    };
+
     for (size_t i = 0; i < replay_->hits.size(); ++i) {
         const auto& hit = replay_->hits[i];
 
@@ -275,15 +290,9 @@ void ChartView::draw_replay_hits(ImDrawList* dl, const ImVec2& win_pos,
             box_color = judge_box_color(jg, is_fast);
         }
 
+        // LR2: 每个 release 是独立 hit (is_press=false)。无论显示模式都画钻石。
         if (!hit.is_press) {
-            float cx = win_pos.x + chart_x0() + column * kLaneWidth + kLaneWidth * 0.5f;
-            float cy = screen_y(t_start, win_pos, win_size);
-            float sz = std::max(2.0f, note_thickness_ / 4.0f);
-            ImU32 rel_col = IM_COL32(160, 160, 200, 180);
-            dl->AddQuadFilled(
-                ImVec2(cx, cy - sz), ImVec2(cx + sz, cy),
-                ImVec2(cx, cy + sz), ImVec2(cx - sz, cy),
-                rel_col);
+            draw_release_diamond(column, t_start);
             continue;
         }
 
@@ -320,6 +329,23 @@ void ChartView::draw_replay_hits(ImDrawList* dl, const ImVec2& win_pos,
             dl->AddRect(ImVec2(bx, by),
                         ImVec2(bx + kReplayBoxWidth, by + box_h),
                         box_color, 0.0f, 0, line_thk);
+        }
+
+        // BRD: press/release 被合并为单个 press hit, release 编码为 tick_end。
+        // 在 line/marker 模式下 press 没有视觉范围, 需要在 tick_end 处补一个
+        // release 钻石标记 (box 模式下 box 底边已隐含 release, 不重复绘制)。
+        if (show_releases_ && hit.is_press
+            && hit.tick_end > hit.tick_start
+            && replay_display_mode_ != ReplayDisplayMode::FullHold) {
+            draw_release_diamond(column, hit.tick_end);
+        }
+
+        // BRD hold-press: release 编码为 press hit 的 tick_end (is_press=true 且 tick_end>tick_start)。
+        // Line/Marker 模式只画了按下位置, 这里补画松开位置的菱形; Box 模式已用矩形
+        // 完整展示 hold 区间, 不再额外标记, 保持现有行为不变。
+        if (show_releases_ && hit.is_press && hit.tick_end > hit.tick_start &&
+            replay_display_mode_ != ReplayDisplayMode::FullHold) {
+            draw_release_diamond(column, hit.tick_end);
         }
 
         // 新增: 用 show_fs_labels_ 控制是否绘制 F/S 标签文字

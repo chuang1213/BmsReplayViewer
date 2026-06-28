@@ -82,6 +82,23 @@ if(WIN32)
     target_link_libraries(bmv PRIVATE opengl32)
 endif()
 
+# --- 嵌入 0xProto 字体: 用 xxd -i 把 .ttf 转 C++ 数组 ---
+# 输出 src/assets/0xproto_font.h, 由 #include 进 application.cpp。
+# 用 -n bmv_proto_font_source 固定变量名, 避免传入绝对路径导致 xxd
+# 把盘符/路径信息编入变量名。
+add_custom_command(
+    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/0xproto_font.h
+    COMMAND xxd -i -n bmv_proto_font_source
+                ${CMAKE_CURRENT_SOURCE_DIR}/0xProtoNerdFontPropo-Regular.ttf
+            > ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/0xproto_font.h
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/0xProtoNerdFontPropo-Regular.ttf
+    COMMENT "Converting 0xProto font to C++ header"
+)
+add_custom_target(generate_font
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/0xproto_font.h
+)
+add_dependencies(bmv generate_font)
+
 # Debug logging control for library code
 option(BMV_DEBUG "Enable debug logging in library code" OFF)
 if(BMV_DEBUG)

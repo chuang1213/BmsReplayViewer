@@ -14,6 +14,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "GLFW/glfw3.h"
+#include "assets/0xproto_font.h"
 #include <filesystem>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include "GLFW/glfw3native.h"
@@ -444,6 +445,19 @@ int Application::run() {
 
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init("#version 150");
+
+    // 嵌入 0xProto 字体并全局使用
+    {
+        ImFontConfig cfg;
+        cfg.OversampleH = 2;
+        cfg.OversampleV = 2;
+        ImFont* font = io.Fonts->AddFontFromMemoryTTF(
+            (void*)bmv_proto_font_source,
+            (int)bmv_proto_font_source_len,
+            16.0f, &cfg, nullptr);
+        IM_ASSERT(font != nullptr);
+        io.FontDefault = font;
+    }
 
     load_recent_files();
 
