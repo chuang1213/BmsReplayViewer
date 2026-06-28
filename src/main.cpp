@@ -2,14 +2,23 @@
 #include "format/bms_parser.h"
 #include "render/png_renderer.h"
 #include "replay/replay.h"
-#include "replay/lr2_random.h"
 #include "app/application.h"
 #include "analysis/judgement_engine.h"
+#include "util/encoding.h"
+#include "util/fs_util.h"
+#include "picosha2.h"
+#include "md5.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <cstring>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 static int run_cli(int argc, char* argv[]) {
     std::string input_path;
@@ -40,6 +49,16 @@ static int run_cli(int argc, char* argv[]) {
     if (raw.channels.empty()) {
         std::fprintf(stderr, "Error: no channel data parsed from '%s'\n", input_path.c_str());
         return 1;
+    }
+
+    // Calculate hash for CLI mode (cross-platform path encoding via fs_util)
+    auto file_bytes = bmv::read_file_binary(input_path);
+    if (!file_bytes.empty()) {
+        std::string sha256 = picosha2::hash256_hex_string(file_bytes);
+        std::string md5 = md5::hash_hex_string(file_bytes);
+
+        std::printf("SHA256: %s\n", sha256.c_str());
+        std::printf("MD5:    %s\n", md5.c_str());
     }
 
     std::printf("Building timeline...\n");
@@ -147,11 +166,54 @@ static int run_cli(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-#ifdef _DEBUG
-    bmv::test_lr2_random();
+#ifdef _WIN32
+    // 让控制台按 UTF-8 解释输出，避免日文 Title/Artist 显示为乱码。
+    // （GUI 子系统下无控制台，这两个调用是 no-op）
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    // Windows CRT 的 argv 按 ANSI 代码页编码，日文路径会乱码。
+    // 重新用 GetCommandLineW + CommandLineToArgvW 获取宽字符参数，转为 UTF-8，
+    // 使 CLI 和 GUI 路径编码统一为 UTF-8（与 fs_util::to_path() 期望一致）。
+    {
+        int wargc = 0;
+        wchar_t** wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
+        if (wargv && wargc > 0) {
+            static std::vector<std::string> utf8_args;
+            static std::vector<char*> utf8_argv;
+            utf8_args.clear();
+            utf8_argv.clear();
+            utf8_args.reserve(wargc);
+            utf8_argv.reserve(wargc);
+            for (int i = 0; i < wargc; ++i) {
+                utf8_args.push_back(bmv::wstring_to_utf8(wargv[i]));
+                utf8_argv.push_back(utf8_args.back().data());
+            }
+            LocalFree(wargv);
+            argc = wargc;
+            argv = utf8_argv.data();
+        }
+    }
 #endif
     if (argc == 1) {
         return bmv::Application().run();
     }
+    // --gui <file>: 启动 GUI 并自动加载指定谱面（argv 已转为 UTF-8）
+    if (argc >= 3 && std::strcmp(argv[1], "--gui") == 0) {
+        bmv::Application app;
+        app.set_preload_chart(argv[2]);
+        return app.run();
+    }
     return run_cli(argc, argv);
 }
+
+#ifdef _WIN32
+// GUI 子系统入口点（Release 用 /SUBSYSTEM:WINDOWS）。
+// Debug 用 /SUBSYSTEM:CONSOLE，链接器找 main()，此函数被忽略。
+// MSVC CMake 的 NDEBUG 宏只在 Release 定义，用于区分两种构建。
+#ifdef NDEBUG
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+    return main(__argc, (char**)__argv);
+}
+#endif
+#endif

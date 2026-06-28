@@ -53,12 +53,12 @@ void JudgementEngine::compute_lane_mappings(const ReplayData& replay) {
     }
 
     if (replay.format == ReplayFormat::BRD && replay.has_shuffle) {
+        // shuffle_pattern 已经是统一格式：shuffle_pattern[display_lane] = bms_lane
+        // 其中 0 = scratch, 1-7 = keys
         for (int i = 0; i < 8; ++i) {
-            int original_val = replay.shuffle_pattern[i];
-            int bms_lane     = (original_val == 7) ? 0 : (original_val + 1);
-            int display_lane = (i == 7) ? 0 : (i + 1);
-            computed_display_to_bms_[display_lane] = bms_lane;
-            computed_bms_to_display_[bms_lane] = display_lane;
+            int bms_lane = replay.shuffle_pattern[i];
+            computed_display_to_bms_[i] = bms_lane;
+            computed_bms_to_display_[bms_lane] = i;
         }
     } else if (replay.format == ReplayFormat::LR2REP && replay.has_random_info[player_idx_]) {
         switch (replay.random_mode[player_idx_]) {

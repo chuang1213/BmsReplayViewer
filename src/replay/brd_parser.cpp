@@ -1,10 +1,11 @@
 #include "brd_parser.h"
 #include "replay_adapter.h"
+#include "java_random.h"
 #include "base64.h"
 #include "gzip.h"
 #include "json.hpp"
+#include "util/fs_util.h"
 
-#include <fstream>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -20,13 +21,7 @@ static std::vector<uint8_t> gzip_decompress(const void* data, size_t size) {
 // --- Sub-functions ---
 
 static std::vector<uint8_t> brd_read_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f) return {};
-    size_t size = static_cast<size_t>(f.tellg());
-    f.seekg(0, std::ios::beg);
-    std::vector<uint8_t> data(size);
-    f.read(reinterpret_cast<char*>(data.data()), size);
-    return data;
+    return bmv::read_file_binary(path);
 }
 
 // GZIP-decompress the raw .brd file and parse the inner JSON.
@@ -45,20 +40,20 @@ static std::vector<uint8_t> brd_unwrap_json(const std::vector<uint8_t>& raw,
         return {};
     }
 
-    // TODO: Phase X - BRD version compatibility
-    // [位置保留] 旧版本 BRD 格式检测与分支逻辑
-    // 根据 JSON 结构/版本号判断，调用不同的解析流程
-    // 当前: 仅支持最新版本
-    // Version detection stub:
-    // int brd_version = detect_brd_version(j);
-    // if (brd_version < 0) {
-    // #ifdef BMV_DEBUG
-    //     std::fprintf(stderr, "[BrdParser] Unknown BRD version, attempting latest format...\n");
-    // #endif
-    // }
-
     out_json = std::move(j);
     return json_bytes;
+}
+
+// Detect BRD format version by checking JSON field names.
+// Returns: "new" (keyinput), "old" (keylog), "unknown"
+static const char* brd_detect_version(const nlohmann::json& j) {
+    if (j.contains("keyinput") && j["keyinput"].is_string()) {
+        return "new";
+    }
+    if (j.contains("keylog") && j["keylog"].is_array()) {
+        return "old";
+    }
+    return "unknown";
 }
 
 // Parse 9-byte key frames from binary stream.
@@ -103,6 +98,44 @@ static std::vector<RawInputEvent> brd_decode_frames(const std::vector<uint8_t>& 
     return events;
 }
 
+// Parse keylog array from legacy BRD format.
+// Each element: {"presstime": int64, "keycode": int 0-7, "pressed": bool (optional)}
+// keycode: 0-6 = keys (lane 1-7), 7 = scratch (lane 0)
+static std::vector<RawInputEvent> brd_decode_keylog(const nlohmann::json& keylog,
+                                                      int64_t& out_duration_us) {
+    std::vector<RawInputEvent> events;
+
+    for (const auto& entry : keylog) {
+        if (!entry.is_object()) continue;
+
+        if (!entry.contains("presstime") || !entry["presstime"].is_number_integer()) {
+            continue;
+        }
+        int64_t ts = entry["presstime"].get<int64_t>();
+
+        if (!entry.contains("keycode") || !entry["keycode"].is_number_integer()) {
+            continue;
+        }
+        int keycode = entry["keycode"].get<int>();
+        if (keycode < 0 || keycode > 7) continue;
+
+        bool pressed = false;
+        if (entry.contains("pressed") && entry["pressed"].is_boolean()) {
+            pressed = entry["pressed"].get<bool>();
+        }
+
+        // keycode -> lane mapping (same as new format)
+        uint8_t lane;
+        if (keycode == 7)      lane = 0;         // Scratch -> lane 0
+        else /* keycode 0-6 */ lane = static_cast<uint8_t>(keycode + 1); // K0-K6 -> lane 1-7
+
+        events.push_back({ts, lane, pressed});
+    }
+
+    if (!events.empty()) out_duration_us = events.back().time_us;
+    return events;
+}
+
 // Extract BRD-specific metadata (shuffle pattern) from JSON.
 static BrdMeta brd_extract_meta(const nlohmann::json& j) {
     BrdMeta meta;
@@ -110,12 +143,34 @@ static BrdMeta brd_extract_meta(const nlohmann::json& j) {
     if (j.contains("laneShufflePattern") && j["laneShufflePattern"].is_array()) {
         auto& outer = j["laneShufflePattern"];
         if (!outer.empty() && outer[0].is_array() && outer[0].size() == 8) {
+            // 新 BRD 的 laneShufflePattern 是 beatoraja 格式，需要转换为统一格式
+            int beatoraja_pattern[8];
             for (int i = 0; i < 8; ++i) {
                 if (outer[0][i].is_number_integer()) {
-                    meta.shuffle_pattern[i] = outer[0][i].get<int>();
-                    meta.has_shuffle = true;
+                    beatoraja_pattern[i] = outer[0][i].get<int>();
+                } else {
+                    beatoraja_pattern[i] = i;
                 }
             }
+            
+            // 坐标转换：beatoraja → 统一格式
+            for (int display_bev = 0; display_bev < 8; ++display_bev) {
+                int bms_bev = beatoraja_pattern[display_bev];
+                int display_our = (display_bev == 7) ? 0 : display_bev + 1;
+                int bms_our = (bms_bev == 7) ? 0 : bms_bev + 1;
+                meta.shuffle_pattern[display_our] = bms_our;
+            }
+            meta.has_shuffle = true;
+        }
+    } else if (j.contains("randomoption") && j.contains("randomoptionseed")) {
+        // 旧 BRD 没有 laneShufflePattern，但有 seed，需要计算
+        int random_option = j["randomoption"].get<int>();
+        int64_t seed = j["randomoptionseed"].get<int64_t>();
+        
+        // 只有 random_option == 2 或 9 时才需要计算 shuffle
+        if (random_option == 2 || random_option == 9) {
+            build_brd_random_pattern(random_option, seed, meta.shuffle_pattern);
+            meta.has_shuffle = true;
         }
     }
 
@@ -139,26 +194,37 @@ ReplayInput BrdParser::parse_replay_input(const std::string& filepath) {
 
     input.brd = brd_extract_meta(j);
 
-    if (!j.contains("keyinput") || !j["keyinput"].is_string()) {
+    const char* version = brd_detect_version(j);
+
+    if (std::strcmp(version, "new") == 0) {
+        // New format: keyinput (base64 + GZIP)
+        std::string keyinput = j["keyinput"].get<std::string>();
+
+        auto decoded = base64::decode(keyinput);
+        if (decoded.empty()) {
 #ifdef BMV_DEBUG
-        std::fprintf(stderr, "[BrdParser] missing 'keyinput' field\n");
+            std::fprintf(stderr, "[BrdParser] base64 decode produced no data\n");
+#endif
+            return input;
+        }
+
+        auto bin = gzip_decompress(decoded.data(), decoded.size());
+        if (bin.empty()) return input;
+
+        input.events = brd_decode_frames(bin, j, input.duration_us);
+
+    } else if (std::strcmp(version, "old") == 0) {
+        // Legacy format: keylog (JSON array)
+        const auto& keylog = j["keylog"];
+        input.events = brd_decode_keylog(keylog, input.duration_us);
+
+    } else {
+#ifdef BMV_DEBUG
+        std::fprintf(stderr, "[BrdParser] unknown BRD format: missing keyinput or keylog\n");
 #endif
         return input;
     }
-    std::string keyinput = j["keyinput"].get<std::string>();
 
-    auto decoded = base64::decode(keyinput);
-    if (decoded.empty()) {
-#ifdef BMV_DEBUG
-        std::fprintf(stderr, "[BrdParser] base64 decode produced no data\n");
-#endif
-        return input;
-    }
-
-    auto bin = gzip_decompress(decoded.data(), decoded.size());
-    if (bin.empty()) return input;
-
-    input.events = brd_decode_frames(bin, j, input.duration_us);
     return input;
 }
 

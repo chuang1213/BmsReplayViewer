@@ -39,10 +39,16 @@ add_executable(bmv
     src/format/bms_parser.cpp
     src/render/png_renderer.cpp
     src/replay/brd_parser.cpp
+    src/replay/java_random.cpp
     src/replay/lr2rep_parser.cpp
     src/replay/lr2_random.cpp
     src/replay/replay_adapter.cpp
     src/replay/replay_factory.cpp
+    src/replay/unified/parser.cpp
+    src/replay/unified/brd_parser.cpp
+    src/replay/unified/lr2_parser.cpp
+    src/replay/unified/random.cpp
+    src/replay/unified/adapter.cpp
     src/app/application.cpp
     src/app/panels/chart_view.cpp
     src/app/panels/video_export.cpp
@@ -76,7 +82,6 @@ if(WIN32)
     target_link_libraries(bmv PRIVATE opengl32)
 endif()
 
-# Debug logging control for library code
 option(BMV_DEBUG "Enable debug logging in library code" OFF)
 if(BMV_DEBUG)
     target_compile_definitions(bmv PRIVATE BMV_DEBUG)
@@ -85,6 +90,15 @@ endif()
 if(MSVC)
     target_compile_options(bmv PRIVATE /W4 /utf-8)
     target_compile_definitions(bmv PRIVATE _CRT_SECURE_NO_WARNINGS)
+    # Release 用 GUI 子系统（双击不弹黑窗），Debug 用控制台子系统（printf 可见）
+    set_target_properties(bmv PROPERTIES
+        LINK_FLAGS_DEBUG "/SUBSYSTEM:CONSOLE"
+        LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS"
+        LINK_FLAGS_RELWITHDEBINFO "/SUBSYSTEM:WINDOWS"
+        LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS"
+    )
 else()
     target_compile_options(bmv PRIVATE -Wall -Wextra)
 endif()
+
+

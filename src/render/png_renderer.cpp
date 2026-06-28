@@ -5,9 +5,11 @@
 
 #include "core_renderer.h"
 #include "replay/lr2_random.h"
+#include "util/fs_util.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 
 namespace bmv {
 
@@ -179,11 +181,11 @@ bool PngRenderer::render(const Timeline& timeline,
     // Build lane shuffle table from replay data (chart notes get shuffled; replay hits stay physical)
     for (int i = 0; i < 8; ++i) bms_lane_to_display_[i] = i;  // default 1:1
     if (replay && replay->has_shuffle) {
+        // shuffle_pattern 已经是统一格式：shuffle_pattern[display_lane] = bms_lane
+        // 其中 0 = scratch, 1-7 = keys
         for (int i = 0; i < 8; ++i) {
-            int original_val = replay->shuffle_pattern[i];
-            int bms_lane = (original_val == 7) ? 0 : (original_val + 1);
-            int display_lane = (i == 7) ? 0 : (i + 1);
-            bms_lane_to_display_[bms_lane] = display_lane;
+            int bms_lane = replay->shuffle_pattern[i];
+            bms_lane_to_display_[bms_lane] = i;
         }
     }
     if (replay && replay->format == ReplayFormat::LR2REP && replay->has_random_info[0]) {
@@ -287,9 +289,22 @@ bool PngRenderer::render(const Timeline& timeline,
     draw_stop_lines(timeline);
     draw_measure_numbers(timeline);
 
+    // 用 stbi_write_png_to_func + std::ofstream(to_path) 写入，
+    // 避免 stbi_write_png 内部 fopen 不支持 UTF-8 路径的问题。
+    struct WriteCtx { std::ofstream f; };
+    WriteCtx ctx;
+    ctx.f = std::ofstream(to_path(output_path), std::ios::binary | std::ios::trunc);
+    if (!ctx.f) {
+        std::fprintf(stderr, "Error: cannot open output '%s'\n", output_path.c_str());
+        return false;
+    }
+    auto write_cb = [](void* context, void* data, int size) {
+        static_cast<WriteCtx*>(context)->f.write(
+            static_cast<const char*>(data), static_cast<std::streamsize>(size));
+    };
     int stride = img_w * 4;
-    int result = stbi_write_png(output_path.c_str(), img_w, img_h, 4,
-                                 buf_.pixels.data(), stride);
+    int result = stbi_write_png_to_func(write_cb, &ctx, img_w, img_h, 4,
+                                         buf_.pixels.data(), stride);
     if (result == 0) {
         std::fprintf(stderr, "Error: failed to write PNG '%s'\n", output_path.c_str());
         return false;

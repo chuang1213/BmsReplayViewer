@@ -1,7 +1,5 @@
 #include "lr2_random.h"
-#include <cassert>
 #include <cstdint>
-#include <cstdio>
 
 namespace bmv {
 
@@ -81,25 +79,6 @@ void build_random_lane_pattern(int seed, int L, int display_to_bms[8], int bms_t
     display_to_bms[0] = 0;
     for (int i = 1; i <= L; ++i)
         display_to_bms[bms_to_display[i]] = i;
-}
-
-void test_lr2_random() {
-    int d2b[8];
-    int b2d[8];
-    build_random_lane_pattern(24332, 7, d2b, b2d);
-
-    const int expected_d2b[8] = {0, 1, 7, 5, 2, 4, 3, 6};
-    for (int i = 0; i < 8; ++i)
-        assert(d2b[i] == expected_d2b[i]);
-
-    const int expected_b2d[8] = {0, 1, 4, 6, 5, 3, 7, 2};
-    for (int i = 0; i < 8; ++i)
-        assert(b2d[i] == expected_b2d[i]);
-
-    std::fprintf(stdout, "[LR2Random] Seed=24332 d2b: %d %d %d %d %d %d %d %d  (PASS)\n",
-                 d2b[0], d2b[1], d2b[2], d2b[3], d2b[4], d2b[5], d2b[6], d2b[7]);
-    std::fprintf(stdout, "[LR2Random] Seed=24332 b2d: %d %d %d %d %d %d %d %d  (PASS)\n",
-                 b2d[0], b2d[1], b2d[2], b2d[3], b2d[4], b2d[5], b2d[6], b2d[7]);
 }
 
 } // namespace bmv

@@ -7,6 +7,7 @@
 #include <vector>
 
 struct GLFWwindow;
+struct ImFont;
 
 namespace bmv {
 
@@ -15,6 +16,7 @@ public:
     Application() = default;
     ~Application() = default;
     int run();
+    void set_preload_chart(const std::string& utf8_path) { preload_chart_ = utf8_path; }
 
 private:
     Timeline      timeline_;
@@ -31,6 +33,8 @@ private:
 
     std::string   bms_sha256_;
     std::string   bms_md5_;
+    std::string   preload_chart_;  // GUI 启动后自动加载的谱面路径
+    ImFont*       cjk_font_        = nullptr;  // 元数据栏日文显示用
 
     struct RecentList {
         std::vector<std::string> charts;

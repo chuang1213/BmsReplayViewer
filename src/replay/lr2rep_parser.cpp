@@ -1,6 +1,6 @@
 #include "lr2rep_parser.h"
 #include "replay_adapter.h"
-#include <fstream>
+#include "util/fs_util.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -27,13 +27,7 @@ static uint8_t lr2_op_to_lane(int op) {
 // --- Sub-functions ---
 
 static std::vector<uint8_t> lr2_read_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f) return {};
-    size_t size = static_cast<size_t>(f.tellg());
-    f.seekg(0, std::ios::beg);
-    std::vector<uint8_t> buf(size);
-    f.read(reinterpret_cast<char*>(buf.data()), size);
-    return buf;
+    return bmv::read_file_binary(path);
 }
 
 // Parse 12-byte records → RawInputEvent list (unpaired press/release).
