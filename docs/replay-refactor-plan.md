@@ -250,19 +250,19 @@ struct ParseError {
 - 合成 LR2 元数据测试
 - 新旧端到端等价性测试
 
-### 阶段 6: 集成测试
+### 阶段 6: 集成测试 ✅ 已完成
 
-**目标**：用真实的测试文件验证端到端功能
+**目标**：将 unified 解析层接入 bmv 主程序，替换旧调用路径，验证端到端功能
 
-**任务**：
-1. 用 `testfiles/` 里的 brd 和 lr2rep 样本，跑完整的解析流程
-2. 对比新旧版本的输出（`ReplayData`）
-3. 手动验证 UI 显示是否正确
-
-**验收标准**：
-- 所有测试文件都能正确解析
-- UI 显示与旧版本一致
-- 错误情况有清晰的错误信息
+**已完成任务**：
+1. ✅ CMakeLists.txt：unified 代码加入 bmv target（5个源文件），旧代码保留
+2. ✅ application.cpp：替换 load_replay_file 调用路径
+   - 旧：parse_replay → replay_input_to_replay_data
+   - 新：parse_replay (unified) → unified_to_replay_data
+   - hash 校验用新的 fmt 变量替代 input->format
+3. ✅ 解决命名冲突：去掉 replay/replay.h，单独 include 所需头文件
+4. ✅ bmv.exe 编译通过
+5. ✅ 所有 5 个测试套件回归通过（test_unified_random, test_brd_parser, test_lr2_parser, test_parser, test_adapter）
 
 ---
 

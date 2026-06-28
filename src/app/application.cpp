@@ -1,6 +1,10 @@
 #include "application.h"
 #include "format/bms_parser.h"
-#include "replay/replay.h"
+#include "replay/replay_data.h"
+#include "replay/raw_input_event.h"
+#include "replay/replay_adapter.h"
+#include "replay/unified/parser.h"
+#include "replay/unified/adapter.h"
 #include "app/panels/welcome_panel.h"
 #include "app/panels/about_panel.h"
 #include "picosha2.h"
@@ -113,12 +117,24 @@ void Application::load_replay_file(const std::string& path) {
         std::fprintf(stderr, "[Application] load chart first\n");
         return;
     }
-    auto input = parse_replay(path);
-    if (!input) {
-        std::fprintf(stderr, "[Application] failed to parse replay: %s\n", path.c_str());
+    bmv::ParseError parse_err;
+    auto ur = bmv::parse_replay(path, &parse_err);
+    if (!ur) {
+        std::fprintf(stderr, "[Application] failed to parse replay: %s (%s/%s)\n",
+                    path.c_str(), parse_err.stage.c_str(), parse_err.reason.c_str());
         return;
     }
-    replay_data_ = replay_input_to_replay_data(input.value(), timeline_.time_map);
+
+    // 从文件扩展名推断 format
+    bmv::ReplayFormat fmt = bmv::ReplayFormat::BRD;
+    {
+        auto dot = path.rfind('.');
+        std::string ext = (dot != std::string::npos) ? path.substr(dot) : "";
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (ext == ".lr2rep") fmt = bmv::ReplayFormat::LR2REP;
+    }
+
+    replay_data_ = bmv::unified_to_replay_data(*ur, timeline_.time_map, fmt);
 
     add_recent_replay(path);
     replay_loaded_ = true;
@@ -130,7 +146,7 @@ void Application::load_replay_file(const std::string& path) {
         std::filesystem::path rp(path);
         std::string stem = rp.stem().string();
         bool ok = false;
-        if (input->format == ReplayFormat::LR2REP)
+        if (fmt == ReplayFormat::LR2REP)
             ok = stem.find(bms_md5_) != std::string::npos;
         else
             ok = stem.find(bms_sha256_) != std::string::npos;
