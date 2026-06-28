@@ -110,6 +110,7 @@ void Application::load_chart_file(const std::string& path) {
         bms_md5_ = md5::hash_hex_string(buf);
         std::printf("[Application] chart SHA256: %s\n", bms_sha256_.c_str());
         std::printf("[Application] chart MD5:    %s\n", bms_md5_.c_str());
+        chart_view_.set_chart_hashes(bms_sha256_, bms_md5_);
     }
 }
 
@@ -135,14 +136,7 @@ void Application::load_replay_file(const std::string& path) {
         if (ext == ".lr2rep") fmt = bmv::ReplayFormat::LR2REP;
     }
 
-    replay_data_ = bmv::unified_to_replay_data(*ur, timeline_.time_map, fmt);
-
-    add_recent_replay(path);
-    replay_loaded_ = true;
-    std::printf("[Application] loaded replay: %s (%zu hits)\n",
-                path.c_str(), replay_data_.hits.size());
-    reload_chart_view();
-
+    // Hash 校验: 文件名需包含对应 chart hash
     if (chart_view_.hash_verify_enabled && !bms_sha256_.empty()) {
         std::filesystem::path rp(path);
         std::string stem = rp.stem().string();
@@ -155,9 +149,26 @@ void Application::load_replay_file(const std::string& path) {
         std::printf("[Application] hash verify: %s (%s)\n",
                     chart_view_.hash_verify_status.c_str(),
                     ok ? "matched" : "not found in filename");
+        if (!ok) {
+            std::fprintf(stderr,
+                "[Application] replay rejected: hash mismatch. "
+                "filename does not contain chart hash "
+                "(expected %s). replay not loaded.\n",
+                (fmt == ReplayFormat::LR2REP) ? bms_md5_.c_str()
+                                              : bms_sha256_.c_str());
+            return;
+        }
     } else {
         chart_view_.hash_verify_status.clear();
     }
+
+    replay_data_ = bmv::unified_to_replay_data(*ur, timeline_.time_map, fmt);
+
+    add_recent_replay(path);
+    replay_loaded_ = true;
+    std::printf("[Application] loaded replay: %s (%zu hits)\n",
+                path.c_str(), replay_data_.hits.size());
+    reload_chart_view();
 }
 
 void Application::reload_chart_view() {

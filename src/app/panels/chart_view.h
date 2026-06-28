@@ -64,14 +64,22 @@ public:
     const Timeline* timeline_ptr() const { return timeline_; }
     const ReplayData* replay_ptr() const { return replay_; }
 
-    bool    show_dev_options    = false;
+bool    show_dev_options    = false;
     bool    show_debug_overlay  = false;
     bool    hash_verify_enabled = true;
     std::string hash_verify_status;
 
+    void set_chart_hashes(const std::string& sha256, const std::string& md5) {
+        chart_sha256_ = sha256;
+        chart_md5_    = md5;
+    }
+
 private:
-    const Timeline* timeline_ = nullptr;
+const Timeline* timeline_ = nullptr;
     const ReplayData* replay_ = nullptr;
+
+    std::string chart_sha256_;
+    std::string chart_md5_;
 
     JudgementEngine judge_engine_;
 

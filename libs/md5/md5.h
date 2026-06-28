@@ -39,17 +39,17 @@ inline std::vector<uint8_t> hash(const void* data, size_t size) {
 
     uint64_t bit_len = static_cast<uint64_t>(size) * 8;
 
-    std::vector<uint8_t> padded(size + 1 + 8, 0);
+    // Calculate padding size: need (size + 1 + padding) % 64 == 56
+    size_t pad_size = 64 - ((size + 9) % 64);
+    if (pad_size == 64) pad_size = 0;
+    
+    std::vector<uint8_t> padded(size + 1 + pad_size + 8, 0);
     std::memcpy(padded.data(), data, size);
     padded[size] = 0x80;
-
-    size_t pad_end = size + 1;
-    while ((pad_end + 8) % 64 != 0) {
-        padded.push_back(0);
-        ++pad_end;
-    }
+    
+    size_t len_offset = size + 1 + pad_size;
     for (int i = 0; i < 8; ++i)
-        padded.push_back(static_cast<uint8_t>((bit_len >> (i * 8)) & 0xFF));
+        padded[len_offset + i] = static_cast<uint8_t>((bit_len >> (i * 8)) & 0xFF);
 
     uint32_t a0 = 0x67452301;
     uint32_t b0 = 0xefcdab89;

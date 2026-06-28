@@ -5,11 +5,15 @@
 #include "replay/lr2_random.h"
 #include "app/application.h"
 #include "analysis/judgement_engine.h"
+#include "picosha2.h"
+#include "md5.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <cstring>
+#include <fstream>
+#include <vector>
 
 static int run_cli(int argc, char* argv[]) {
     std::string input_path;
@@ -40,6 +44,22 @@ static int run_cli(int argc, char* argv[]) {
     if (raw.channels.empty()) {
         std::fprintf(stderr, "Error: no channel data parsed from '%s'\n", input_path.c_str());
         return 1;
+    }
+
+    // Calculate hash for CLI mode
+    std::ifstream hash_file(input_path, std::ios::binary | std::ios::ate);
+    if (hash_file) {
+        size_t file_size = static_cast<size_t>(hash_file.tellg());
+        hash_file.seekg(0, std::ios::beg);
+        
+        std::vector<uint8_t> buffer(file_size);
+        hash_file.read(reinterpret_cast<char*>(buffer.data()), file_size);
+        
+        std::string sha256 = picosha2::hash256_hex_string(buffer);
+        std::string md5 = md5::hash_hex_string(buffer);
+        
+        std::printf("SHA256: %s\n", sha256.c_str());
+        std::printf("MD5:    %s\n", md5.c_str());
     }
 
     std::printf("Building timeline...\n");

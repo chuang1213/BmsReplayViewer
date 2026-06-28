@@ -537,8 +537,29 @@ void ChartView::render_controls_child() {
     render_controls_inline();
 }
 
-// 新增: 左栏 - 分析面板 (时序偏移分布直方图 + 判定统计)
+// 新增: 左栏 - 分析面板 (谱面元数据 + 时序偏移分布直方图 + 判定统计)
 void ChartView::render_analysis_panel() {
+    // 谱面元数据区块 (即使没有 replay 也显示)
+    if (timeline_) {
+        ImGui::SeparatorText("Chart Metadata");
+        ImGui::TextWrapped("Title:  %s", timeline_->title.c_str());
+        ImGui::TextWrapped("Artist: %s", timeline_->artist.c_str());
+        ImGui::Text("BPM:    %.1f", timeline_->initial_bpm);
+        if (!chart_sha256_.empty())
+            ImGui::TextWrapped("SHA256: %s", chart_sha256_.c_str());
+        if (!chart_md5_.empty())
+            ImGui::TextWrapped("MD5:    %s", chart_md5_.c_str());
+        if (!hash_verify_status.empty()) {
+            bool ok = (hash_verify_status == "OK");
+            ImGui::TextColored(ok ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f)
+                                  : ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
+                               "Hash: %s", hash_verify_status.c_str());
+        }
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+    }
+
     if (!timeline_ || !replay_ || replay_->hits.empty()) {
         ImGui::TextDisabled("No replay loaded.");
         return;
